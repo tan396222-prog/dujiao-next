@@ -167,11 +167,11 @@ html[data-skin="crystal"] body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(720px 460px at 12% 18%, rgba(176, 146, 255, 0.55), transparent 68%),
-    radial-gradient(640px 420px at 88% 8%, rgba(255, 206, 236, 0.72), transparent 66%),
-    radial-gradient(560px 380px at 62% 78%, rgba(164, 148, 255, 0.38), transparent 70%),
-    radial-gradient(420px 280px at 30% 92%, rgba(255, 255, 255, 0.9), transparent 70%),
-    linear-gradient(180deg, #fbf8ff 0%, #f1e8ff 46%, #f7f3ff 100%);
+    radial-gradient(540px 420px at 22% 46%, rgba(168, 130, 255, 0.62), transparent 70%),
+    radial-gradient(480px 360px at 74% 58%, rgba(255, 186, 224, 0.58), transparent 70%),
+    radial-gradient(640px 420px at 50% 8%, rgba(255, 255, 255, 0.85), transparent 62%),
+    radial-gradient(520px 340px at 48% 96%, rgba(186, 164, 255, 0.4), transparent 72%),
+    linear-gradient(180deg, #fbf8ff 0%, #efe6ff 48%, #f7f3ff 100%);
 }
 
 html.dark[data-skin="crystal"] body::before {
@@ -199,8 +199,8 @@ html[data-skin="crystal"] :is(
   .rounded-\[28px\].bg-card,
   .store-product-grid > a
 ) {
-  background-color: rgba(255, 255, 255, 0.46);
-  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.08));
+  background-color: rgba(255, 255, 255, 0.38);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.05));
   border: 1px solid var(--crystal-line);
   box-shadow: var(--crystal-highlight), var(--crystal-shadow);
   backdrop-filter: var(--crystal-blur);
