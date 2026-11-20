@@ -34,12 +34,12 @@
 
       <!-- 商品区 -->
       <section>
-        <div v-if="loading" class="grid gap-4 grid-cols-[repeat(auto-fill,minmax(228px,1fr))]">
+        <div v-if="loading" class="store-product-grid grid gap-4 grid-cols-[repeat(auto-fill,minmax(228px,1fr))]">
           <div v-for="i in 9" :key="i" class="h-[280px] rounded-lg border bg-card"></div>
         </div>
 
         <template v-else-if="products.length">
-          <div class="grid gap-4 grid-cols-[repeat(auto-fill,minmax(228px,1fr))]">
+          <div class="store-product-grid grid gap-4 grid-cols-[repeat(auto-fill,minmax(228px,1fr))]">
             <VaultProductCard
               v-for="(product, idx) in products"
               :key="product.id"

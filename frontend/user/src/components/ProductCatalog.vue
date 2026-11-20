@@ -254,7 +254,7 @@ const groups = useProductListGroups(products, categoryMap)
 
 // 大屏左侧有分类栏，网格比通栏时少一列
 const isList = computed(() => props.layout === 'list')
-const gridClass = 'grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6'
+const gridClass = 'store-product-grid grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6'
 // 大卡占 2 列 2 行，分类里商品凑不满两行时旁边会留空，所以够多才放大首位
 const LEAD_MIN_GROUP_SIZE = 7
 
