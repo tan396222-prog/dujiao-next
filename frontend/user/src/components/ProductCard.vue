@@ -146,25 +146,14 @@
           </span>
         </div>
         <button
-          v-if="lead"
           type="button"
-          class="h-8 shrink-0 whitespace-nowrap rounded-full bg-foreground px-3 text-[13px] font-semibold text-background transition-opacity hover:opacity-85 disabled:opacity-40 md:h-10 md:px-5 md:text-sm"
+          class="pcard-cart grid h-[34px] w-[34px] max-h-[34px] max-w-[34px] shrink-0 place-items-center rounded-full bg-secondary p-0 text-foreground transition-colors hover:bg-foreground hover:text-background disabled:pointer-events-none"
+          :aria-label="lead ? t('quickBuy.buyNow') : t('products.quickBuyAria')"
           :disabled="soldOut"
           @click.stop="$emit('quickBuy', product)"
           @keydown.enter.stop
         >
-          {{ t('quickBuy.buyNow') }}
-        </button>
-        <button
-          v-else
-          type="button"
-          class="pcard-cart grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-secondary text-foreground transition-colors hover:bg-foreground hover:text-background disabled:pointer-events-none"
-          :aria-label="t('products.quickBuyAria')"
-          :disabled="soldOut"
-          @click.stop="$emit('quickBuy', product)"
-          @keydown.enter.stop
-        >
-          <ShoppingCart class="h-4 w-4" />
+          <ShoppingCart class="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -285,6 +274,15 @@ const handleImageError = () => {
 .pcard-cover {
   object-position: center;
   transition: transform 350ms var(--ui-ease-out);
+}
+
+.pcard-cart {
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  max-width: 34px;
+  max-height: 34px;
+  padding: 0;
 }
 
 @media (hover: hover) {

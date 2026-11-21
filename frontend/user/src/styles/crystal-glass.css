@@ -466,11 +466,22 @@ html[data-skin="crystal"] :is(.pcard-cart, .prow-buy, .theme-pill-link, .catalog
   min-height: 44px;
 }
 
-html[data-skin="crystal"] .pcard-cart,
 html[data-skin="crystal"] .prow-buy.max-md\:w-9 {
   min-width: 44px;
   width: 44px;
   height: 44px;
+}
+
+html[data-skin="crystal"] .pcard-cart,
+html[data-skin="crystal"] .pcard-cart:is(:hover, :focus, :focus-visible, :active) {
+  box-sizing: border-box;
+  min-width: 44px;
+  width: 44px;
+  max-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  max-height: 44px;
+  padding: 0;
 }
 
 @media (min-width: 768px) {
