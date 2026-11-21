@@ -40,10 +40,12 @@ Promise.all([
   setI18nLocale(detectLocale()),
 ]).then(() => {
   app.mount('#app')
-  document.getElementById('boot')?.remove()
 })
 
 void router.isReady().then(() => {
     warmupCommonRoutes()
     warmupLocaleMessages()
+}).finally(() => {
+    // 首屏开场由 index.html 播完约 3 秒再淡出。这里只通知配置和路由已经结束，不提前拆掉开场。
+    window.dispatchEvent(new Event('dj-storefront-ready'))
 })

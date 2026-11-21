@@ -17,31 +17,48 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background:
+      background-color: #efe6ff;
+      background-image:
         radial-gradient(420px 340px at 22% 28%, rgba(164, 98, 255, 0.96), transparent 62%),
         radial-gradient(380px 300px at 46% 24%, rgba(255, 148, 206, 0.88), transparent 64%),
         radial-gradient(360px 280px at 72% 30%, rgba(126, 196, 255, 0.86), transparent 64%),
+        radial-gradient(300px 240px at 34% 62%, rgba(214, 170, 255, 0.72), transparent 68%),
+        radial-gradient(140px 100px at 40% 34%, rgba(255, 255, 255, 0.92), transparent 70%),
         linear-gradient(165deg, #f7f3ff 0%, #efe3ff 46%, #f6f1ff 100%);
+      transition: opacity 420ms ease;
     }
-    #boot .knot-stage {
-      display: grid;
-      width: 92px;
-      height: 92px;
-      place-items: center;
-      border-radius: 28px;
+    #boot.is-leaving {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #boot .boot-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background: none;
+      border: 0;
+      box-shadow: none;
+    }
+    #boot .boot-logo {
+      width: 96px;
+      height: 96px;
       color: #5b3d92;
-      background: rgba(255, 255, 255, 0.46);
-      border: 1px solid rgba(255, 255, 255, 0.78);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 18px 40px -24px rgba(86, 48, 150, 0.7);
+      background: none;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      overflow: visible;
+      transform-origin: 50% 50%;
+      filter:
+        drop-shadow(0 20px 16px rgba(98, 58, 168, 0.28))
+        drop-shadow(0 0 24px rgba(176, 130, 255, 0.55));
+      animation: boot-pop 3s linear both;
+      will-change: transform;
     }
-    #boot .knot-spin {
-      width: 48px;
-      height: 48px;
-      transform-origin: center;
-      animation: gpt-knot-spin 2.8s linear infinite;
-    }
-    #boot.is-stalled .knot-spin {
+    #boot.is-stalled .boot-logo {
       animation: none;
+      transform: none;
+      opacity: 1;
     }
     #boot-fail {
       margin: 18px 0 0;
@@ -59,23 +76,63 @@
       font: inherit;
       padding: 8px 16px;
     }
-    @keyframes gpt-knot-spin {
-      to { transform: rotate(360deg); }
+    /* 3 秒：从屏幕下方旋转变大弹到中央，过冲后再回弹落稳。不是匀速位移。 */
+    @keyframes boot-pop {
+      0% {
+        opacity: 0;
+        transform: translate3d(0, calc(50vh + 150px), 0) rotate(-220deg) scale(0.18, 0.18);
+        animation-timing-function: cubic-bezier(0.2, 0.85, 0.24, 1);
+      }
+      12% {
+        opacity: 1;
+        transform: translate3d(0, calc(46vh), 0) rotate(-168deg) scale(0.3, 0.36);
+        animation-timing-function: cubic-bezier(0.16, 0.72, 0.22, 1);
+      }
+      32% {
+        opacity: 1;
+        transform: translate3d(0, 28vh, 0) rotate(-78deg) scale(0.58, 0.76);
+        animation-timing-function: cubic-bezier(0.1, 0.72, 0.18, 1.04);
+      }
+      50% {
+        transform: translate3d(0, -38px, 0) rotate(20deg) scale(1.22, 0.88);
+        animation-timing-function: cubic-bezier(0.45, 0.02, 0.55, 1);
+      }
+      66% {
+        transform: translate3d(0, 24px, 0) rotate(-14deg) scale(0.86, 1.12);
+        animation-timing-function: cubic-bezier(0.32, 0.04, 0.48, 1);
+      }
+      80% {
+        transform: translate3d(0, -10px, 0) rotate(6deg) scale(1.08, 0.94);
+        animation-timing-function: cubic-bezier(0.28, 0.08, 0.46, 1);
+      }
+      91% {
+        transform: translate3d(0, 4px, 0) rotate(-2deg) scale(0.98, 1.025);
+        animation-timing-function: cubic-bezier(0.22, 0.2, 0.36, 1);
+      }
+      100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) rotate(0deg) scale(1, 1);
+      }
+    }
+    @keyframes boot-fade {
+      from { opacity: 0; }
+      to { opacity: 1; }
     }
     @media (prefers-reduced-motion: reduce) {
-      #boot .knot-spin { animation: none; }
+      #boot .boot-logo {
+        animation: boot-fade 0.45s ease both;
+        filter: drop-shadow(0 12px 16px rgba(98, 58, 168, 0.22));
+      }
     }
   </style>
 </head>
 
 <body>
   <div id="boot" role="status" aria-live="polite" aria-busy="true">
-    <div>
-      <div class="knot-stage">
-        <svg class="knot-spin" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path fill="currentColor" d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5828a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142-.0852 4.783-2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685V16.6a.0836.0836 0 0 1-.0315.0617L7.8924 19.9502a4.4992 4.4992 0 0 1-6.2934-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5973 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1635a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4999v2.9994l-2.5974 1.4997-2.6067-1.4997z" />
-        </svg>
-      </div>
+    <div class="boot-stack">
+      <svg class="boot-logo" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path fill="currentColor" d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z" />
+      </svg>
       <p id="boot-fail" hidden></p>
     </div>
   </div>
@@ -85,31 +142,58 @@
       var boot = document.getElementById('boot')
       var app = document.getElementById('app')
       if (!boot || !app) return
-      var hide = function () {
-        if (app.childElementCount > 0) boot.remove()
+      var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      var motionMs = reduce ? 450 : 3000
+      var fadeMs = 420
+      var hardMs = 12000
+      var motionDone = false
+      var ready = false
+      var leaving = false
+      var stalled = false
+      var arm = function () {
+        if (stalled || leaving) return
+        if (!motionDone || !ready) return
+        if (app.childElementCount < 1) return
+        leaving = true
+        boot.classList.add('is-leaving')
+        boot.setAttribute('aria-busy', 'false')
+        window.setTimeout(function () {
+          if (boot.isConnected) boot.remove()
+        }, fadeMs)
       }
-      new MutationObserver(hide).observe(app, { childList: true })
       window.setTimeout(function () {
-        if (!boot.isConnected) return
+        motionDone = true
+        arm()
+      }, motionMs)
+      window.addEventListener('dj-storefront-ready', function () {
+        ready = true
+        arm()
+      })
+      new MutationObserver(arm).observe(app, { childList: true })
+      window.setTimeout(function () {
+        if (!boot.isConnected || leaving) return
         if (app.childElementCount > 0) {
-          boot.remove()
+          motionDone = true
+          ready = true
+          arm()
           return
         }
+        stalled = true
         boot.classList.add('is-stalled')
         boot.setAttribute('aria-busy', 'false')
         var fail = document.getElementById('boot-fail')
         if (!fail) return
+        fail.hidden = false
         var lang = (navigator.language || '').toLowerCase()
         var zh = lang.indexOf('zh') === 0
         var traditional = lang.indexOf('tw') !== -1 || lang.indexOf('hk') !== -1 || lang.indexOf('hant') !== -1
-        fail.hidden = false
         fail.textContent = zh ? (traditional ? '載入沒有完成' : '加载没有完成') : "Couldn't load"
         var button = document.createElement('button')
         button.type = 'button'
         button.textContent = zh ? (traditional ? '重試' : '重试') : 'Retry'
         button.addEventListener('click', function () { window.location.reload() })
         fail.appendChild(button)
-      }, 12000)
+      }, hardMs)
     })()
   </script>
   <script type="module" data-cfasync="false" src="/src/main.ts"></script>

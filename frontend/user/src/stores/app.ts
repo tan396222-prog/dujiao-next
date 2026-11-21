@@ -82,8 +82,10 @@ export const useAppStore = defineStore('app', () => {
         }
         const token = ++configLoadToken
         let overlayTimer: number | undefined
-        // 守卫失败后，页面挂载会再要一次配置。第二次不要把全屏加载层重新盖上。
-        const showOverlay = !force && Date.now() - lastConfigFailureAt > 1500
+        // 首屏三秒开场由 index.html 负责。配置还在路上时不要再盖一层路由加载。
+        // 守卫失败后，页面挂载会再要一次配置。第二次也不要把全屏加载层重新盖上。
+        const bootSplash = typeof document !== 'undefined' && document.getElementById('boot')
+        const showOverlay = !force && !bootSplash && Date.now() - lastConfigFailureAt > 1500
         if (showOverlay) {
             loading.value = true
             if (typeof window !== 'undefined') {

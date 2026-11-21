@@ -3,11 +3,24 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { GPT_KNOT_PATH } from '../src/brand/gptKnot.ts'
 
-test('the first-screen loader uses the same knot path as the route overlay', () => {
+test('the first-screen loader uses the published six-petal knot and a three-second bounce', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
+  const overlay = readFileSync(new URL('../src/components/Loading.vue', import.meta.url), 'utf8')
+  const main = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8')
   assert.equal(html.includes(GPT_KNOT_PATH), true)
-  assert.equal(html.includes('gpt-knot-spin'), true)
+  assert.equal(GPT_KNOT_PATH.includes('v2.3324'), true)
+  assert.equal(GPT_KNOT_PATH.includes('L9.74 19.9502'), true)
+  assert.equal(GPT_KNOT_PATH.includes('V16.6a.0836'), false)
+  assert.equal(html.includes('boot-pop 3s'), true)
+  assert.equal(html.includes('dj-storefront-ready'), true)
   assert.equal(html.includes('prefers-reduced-motion'), true)
-  assert.equal(GPT_KNOT_PATH.startsWith('M'), true)
-  assert.equal(GPT_KNOT_PATH.includes(' '), true)
+  assert.equal(html.includes('knot-stage'), false)
+  assert.equal(html.includes('gpt-knot-spin'), false)
+  assert.equal(html.includes('border-radius: 28px'), false)
+  assert.equal(overlay.includes('gpt-knot-spin'), false)
+  assert.equal(overlay.includes('border-radius: 28px'), false)
+  assert.equal(overlay.includes('boot-pop'), false)
+  assert.equal(main.includes("getElementById('boot')?.remove()"), false)
+  assert.equal(main.includes('dj-storefront-ready'), true)
+  assert.equal(GPT_KNOT_PATH.startsWith('M22.2819 9.8211'), true)
 })

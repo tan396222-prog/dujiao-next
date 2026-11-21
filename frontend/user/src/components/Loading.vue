@@ -8,9 +8,7 @@
       :aria-busy="!stalled"
     >
       <div class="flex flex-col items-center gap-5">
-        <div class="knot-stage" :class="stalled && 'is-stalled'">
-          <GptKnotMark class="knot-spin" />
-        </div>
+        <GptKnotMark class="boot-mark" />
         <p class="sr-only">{{ t('common.loading') }}</p>
         <button
           v-if="stalled"
@@ -61,43 +59,23 @@ const retry = () => {
     radial-gradient(420px 340px at 22% 28%, rgba(164, 98, 255, 0.55), transparent 62%),
     radial-gradient(380px 300px at 72% 30%, rgba(126, 196, 255, 0.4), transparent 64%),
     rgba(247, 243, 255, 0.72);
-  backdrop-filter: blur(18px);
 }
 
-.knot-stage {
-  display: grid;
-  width: 92px;
-  height: 92px;
-  place-items: center;
-  border-radius: 28px;
+.boot-mark {
+  width: 96px;
+  height: 96px;
   color: #5b3d92;
-  background: rgba(255, 255, 255, 0.46);
-  border: 1px solid rgba(255, 255, 255, 0.78);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 18px 40px -24px rgba(86, 48, 150, 0.7);
-}
-
-.knot-spin {
-  width: 48px;
-  height: 48px;
-  transform-origin: center;
-  animation: gpt-knot-spin 2.8s linear infinite;
-}
-
-.knot-stage.is-stalled .knot-spin {
-  animation: none;
-}
-
-@keyframes gpt-knot-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  background: none;
+  border: 0;
+  box-shadow: none;
+  filter:
+    drop-shadow(0 20px 16px rgba(98, 58, 168, 0.28))
+    drop-shadow(0 0 24px rgba(176, 130, 255, 0.55));
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .knot-spin {
-    animation: none;
+  .boot-mark {
+    filter: none;
   }
 }
 
