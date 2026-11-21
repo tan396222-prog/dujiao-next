@@ -11,6 +11,7 @@ import (
 func TestDefaultSettingRegistryCoversLegacyNormalizedKeys(t *testing.T) {
 	want := []string{
 		constants.SettingKeyAffiliateConfig,
+		constants.SettingKeyAIFeedConfig,
 		constants.SettingKeyCallbackRoutesConfig,
 		constants.SettingKeyDashboardConfig,
 		constants.SettingKeyGoogleAuthConfig,

@@ -1,4 +1,5 @@
 <template>
+  <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
   <div class="mx-auto w-full max-w-[1180px] px-6 pb-8">
     <nav class="flex flex-wrap items-center gap-1.5 py-5 pb-2 text-[13.5px] font-semibold text-muted-foreground">
       <RouterLink to="/" class="hover:text-primary">{{ t('nav.home') }}</RouterLink>
@@ -208,6 +209,7 @@ import TurnstileCaptcha from '../../components/captcha/TurnstileCaptcha.vue'
 import CheckoutManualForm from '../../components/checkout/CheckoutManualForm.vue'
 import VaultCheckoutSteps from './components/VaultCheckoutSteps.vue'
 import { useCheckout } from '../../composables/useCheckout'
+import PaymentProtectionDialog from '../../components/payment/PaymentProtectionDialog.vue'
 
 const { t } = useI18n()
 
@@ -228,6 +230,7 @@ const {
   requiresOnlineChannel, paymentChannels, selectedChannelId, isChannelDisabledForAmount, channelAmountLimitHint,
   handleSelectChannel, formatChannelFeeRate, formatChannelFixedFee,
   submitting, canSubmit, handleSubmit,
+  protectionOpen, protectionStep, protectionTotal, protectionError, cancelProtection, retryProtection,
 } = useCheckout()
 
 // 字符串模板 ref，逻辑在 composable 内，显式标记避免 noUnusedLocals 误报。

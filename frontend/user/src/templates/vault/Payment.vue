@@ -1,4 +1,5 @@
 <template>
+  <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
   <div class="mx-auto w-full max-w-[1180px] px-6 pb-8">
     <div class="my-5 flex items-start justify-between gap-4">
       <div>
@@ -258,6 +259,7 @@ import PaymentAmountBreakdown from '../../components/payment/PaymentAmountBreakd
 import PaymentChannelSelector from '../../components/payment/PaymentChannelSelector.vue'
 import VaultCheckoutSteps from './components/VaultCheckoutSteps.vue'
 import { usePayment } from '../../composables/usePayment'
+import PaymentProtectionDialog from '../../components/payment/PaymentProtectionDialog.vue'
 
 const { t } = useI18n()
 
@@ -274,6 +276,6 @@ const {
   paymentWalletPaidDisplay, paymentOnlinePayDisplay, isChannelDisabledForAmount, channelAmountLimitHint, canSubmitPayment,
   formatDate, statusLabel, formatMoney, hasDiscountAmount, formatDiscountMoney, getLocalizedText, orderItemSkuText, fulfillmentTypeLabelText,
   handleCopyPayLink, handleCopyWalletAddress, handleOpenPayLink, restoreCachedPayment, handleChangePaymentMethod,
-  handlePayment, handleGuestAuthSubmit, handleRefresh,
+  handlePayment, protectionOpen, protectionStep, protectionTotal, protectionError, cancelProtection, retryProtection, handleGuestAuthSubmit, handleRefresh,
 } = usePayment()
 </script>

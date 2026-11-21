@@ -9,6 +9,7 @@ import (
 
 	"github.com/dujiao-next/internal/constants"
 	reseller "github.com/dujiao-next/internal/modules/reseller/contract"
+	settingsvalue "github.com/dujiao-next/internal/modules/settings/schema/value"
 	"github.com/dujiao-next/internal/platform/http/response"
 	"github.com/dujiao-next/internal/shared/jsonmap"
 	"github.com/dujiao-next/internal/shared/storeimage"
@@ -226,6 +227,8 @@ func (h *Handler) GetConfig(c *gin.Context) {
 		}
 	}
 
+	data["ai_feed_enabled"] = aiFeedEnabled(h.settings)
+
 	if announcement, ok := h.settings.GetActiveHomeAnnouncement(); ok {
 		data["announcement"] = announcement
 	}
@@ -246,6 +249,28 @@ func (h *Handler) GetConfig(c *gin.Context) {
 	data["server_time"] = time.Now().UnixMilli()
 	data["app_version"] = version.Version
 	response.Success(c, data)
+}
+
+func aiFeedEnabled(settings Settings) bool {
+	if settings == nil {
+		return true
+	}
+	raw, err := settings.GetByKey(constants.SettingKeyAIFeedConfig)
+	if err != nil || raw == nil {
+		return true
+	}
+	value, ok := raw.(jsonmap.JSON)
+	if !ok || value == nil {
+		if generic, cast := raw.(map[string]interface{}); cast {
+			value = generic
+		} else {
+			return true
+		}
+	}
+	if enabled, exists := value["enabled"]; exists {
+		return settingsvalue.ParseBool(enabled)
+	}
+	return true
 }
 
 // sanitizePublicWallpaper 前台只拿到通过路径校验的本地图片地址，不暴露管理端字段。

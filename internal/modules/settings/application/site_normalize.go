@@ -527,3 +527,14 @@ func normalizeRegistrationSetting(value map[string]interface{}) jsonmap.JSON {
 
 	return normalized
 }
+
+// normalizeAIFeedConfig keeps only the on/off switch. Upstream URLs are not configurable.
+func normalizeAIFeedConfig(value jsonmap.JSON) jsonmap.JSON {
+	enabled := true
+	if value != nil {
+		if raw, exists := value["enabled"]; exists {
+			enabled = settingsvalue.ParseBool(raw)
+		}
+	}
+	return jsonmap.JSON{"enabled": enabled}
+}

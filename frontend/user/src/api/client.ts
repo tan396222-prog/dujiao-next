@@ -96,6 +96,11 @@ function createClient(injectAuth: boolean) {
         const requestTimeout = Number.isFinite(requestedTimeout) && requestedTimeout > 0 ? requestedTimeout : timeout
         const controller = new AbortController()
         const timer = setTimeout(() => controller.abort(), requestTimeout)
+        const externalSignal = opts.signal as AbortSignal | undefined
+        if (externalSignal) {
+            if (externalSignal.aborted) controller.abort()
+            else externalSignal.addEventListener('abort', () => controller.abort(), { once: true })
+        }
 
         let response: Response
         try {

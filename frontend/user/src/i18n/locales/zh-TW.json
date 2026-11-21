@@ -51,7 +51,8 @@
     "products": "商品中心",
     "blog": "部落格",
     "notice": "公告",
-    "about": "關於"
+    "about": "關於",
+    "feed": "資訊"
   },
   "vault": {
     "hero": {
@@ -223,8 +224,8 @@
     "skuStockRangePlus": "{min}+ 件",
     "stockUnavailable": "當前商品庫存不足，暫不可購買",
     "stockBelowMinPurchase": "目前庫存不足以滿足該商品的最小購買數量（{count} 件）",
-    "addCartStockExceeded": "該規格庫存不足，最多可購買 {count} 件",
-    "addCartStockExceededWithCart": "該規格庫存不足，最多可購買 {count} 件（購物車中已有 {cartCount} 件）",
+    "addCartStockExceeded": "該規格庫存不足，請減少數量",
+    "addCartStockExceededWithCart": "該規格庫存不足，請減少數量",
     "addCartLimitExceeded": "當前商品單次最多可購買 {count} 件",
     "addCartLimitExceededWithCart": "當前商品單次最多可購買 {count} 件（購物車中已有 {cartCount} 件）"
   },
@@ -295,6 +296,7 @@
     "home": "首頁",
     "products": "商品",
     "invite": "邀請",
+    "feed": "資訊",
     "cart": "購物車",
     "me": "我的"
   },
@@ -1183,7 +1185,7 @@
     "checkout": "去結算",
     "stockOut": "該規格已售罄，請減少數量或移除",
     "stockRemaining": "該規格剩餘 {count} 件",
-    "stockExceeded": "該規格庫存不足，目前購物車最多 {count} 件",
+    "stockExceeded": "該規格庫存不足，請減少數量",
     "maxPurchaseExceeded": "該商品單次下單最多可購買 {count} 件",
     "minPurchaseNotMet": "該商品單次下單至少需購買 {count} 件"
   },
@@ -1766,5 +1768,67 @@
     "authInvalid": "資訊不匹配，請重新輸入",
     "authSubmit": "保存並查詢",
     "authClear": "清除已保存資訊"
+  },
+  "paymentProtection": {
+    "title": "下單環境檢查",
+    "waiting": "正在檢查，請耐心等待",
+    "step": "第 {current} 步，共 {total} 步",
+    "done": "完成",
+    "cancel": "取消",
+    "retry": "重試",
+    "limited": "目前來源暫時不能繼續下單",
+    "failed": "檢查沒有完成，訂單尚未建立",
+    "steps": {
+      "1": "核對本次訂單資訊",
+      "2": "向本站確認來源與環境標記",
+      "3": "由伺服器校驗庫存、優惠、餘額和風控",
+      "4": "建立支付請求並打開收銀台"
+    }
+  },
+  "feed": {
+    "title": "資訊",
+    "subtitle": "公開 AI 新聞和重置公告。這裡沒有個人額度，也不需要登入 AI 帳號。",
+    "disclaimer": "資料來自 AIHOT 公開唯讀介面。本店不是其官方合作方，不保存 AI 帳號，也不預測尚未公布的下一次重置。",
+    "coverage": "目前涵蓋：{names}",
+    "loading": "正在讀取公開資訊",
+    "loadFailed": "暫時沒有讀到公開資料，支付和下單不受影響",
+    "retry": "重新讀取",
+    "dailyTitle": "每日摘要",
+    "newsTitle": "新聞",
+    "hotTitle": "熱門話題",
+    "resetsTitle": "重置公告",
+    "resetsHint": "只展示已經發布的公告。標註預計的時間不是精確承諾。",
+    "noDaily": "目前沒有每日摘要",
+    "noNews": "目前沒有新聞",
+    "noHot": "目前沒有熱門話題",
+    "noReset": "暫無已發布公告",
+    "updatedAt": "更新於 {time}",
+    "announcedAt": "公告時間 {time}",
+    "confirmedAt": "確認時間 {time}",
+    "checkedAt": "本次核對 {time}",
+    "schedule": "公告安排：{text}",
+    "estimate": "預計：{text}",
+    "estimated": "預計",
+    "openOriginal": "原文",
+    "openFeed": "AIHOT",
+    "openNotice": "公告原文",
+    "openProviderPage": "查看該來源頁面",
+    "statusWithTime": "{status} · 上次成功 {time}",
+    "status": {
+      "ok": "已更新",
+      "empty": "沒有新內容",
+      "stale": "上游暫時不可用，保留上次成功內容",
+      "unavailable": "暫時不可用",
+      "rate_limited": "讀取過於頻繁，正在退避",
+      "refused": "公開介面拒絕了這次讀取",
+      "disabled": "資訊欄目已關閉"
+    },
+    "providers": {
+      "codex": "Codex",
+      "antigravity": "Antigravity",
+      "claude": "Claude",
+      "grok-bot": "Grok Bot",
+      "grok_bot": "Grok Bot"
+    }
   }
 }

@@ -269,6 +269,11 @@ const router = createRouter({
             component: templateView('GuestOrderDetail', () => import('../views/GuestOrderDetail.vue')),
         },
         {
+            path: '/feed',
+            name: 'feed',
+            component: templateView('AIFeed', () => import('../views/AIFeed.vue')),
+        },
+        {
             path: '/blog',
             name: 'blog',
             component: templateView('Blog', blogViewLoader),

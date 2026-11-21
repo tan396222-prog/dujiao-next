@@ -196,6 +196,7 @@ export function useCart() {
     quantityWarning,
     // purchase limits
     itemPurchaseMin,
+    itemPurchaseLimit,
     itemMaxQuantity,
     // actions
     removeWithUndo,

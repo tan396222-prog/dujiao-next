@@ -9,6 +9,7 @@ import { fulfillmentTypeLabel } from '../utils/fulfillment'
 import { debounceAsync } from '../utils/debounce'
 import { copyText } from '../utils/clipboard'
 import { amountToCents, centsToAmount } from '../utils/money'
+import { protectionHeaders, requestProtection } from '../utils/paymentProtection'
 import { buildSkuDisplayTextFromSnapshot } from '../utils/sku'
 import {
   getCachedPaymentRestorePolicy,
@@ -38,6 +39,10 @@ export function usePayment() {
 
   const loading = ref(true)
   const submitting = ref(false)
+  const protectionOpen = ref(false)
+  const protectionStep = ref(1)
+  const protectionError = ref('')
+  let protectionController: AbortController | null = null
   const order = ref<any>(null)
   const paymentResult = ref<any>(null)
   const error = ref('')
@@ -982,7 +987,24 @@ export function usePayment() {
       return
     }
     submitting.value = true
+    protectionOpen.value = true
+    protectionError.value = ''
+    protectionStep.value = 1
+    protectionController = new AbortController()
     try {
+      protectionStep.value = 2
+      const precheck = await requestProtection({
+        authenticated: !isGuest.value,
+        bind: 'payment',
+        signal: protectionController.signal,
+      })
+      if (precheck.banned) {
+        protectionError.value = t('paymentProtection.limited')
+        error.value = protectionError.value
+        return
+      }
+      const requestOptions = { headers: protectionHeaders(precheck.token), signal: protectionController.signal }
+      protectionStep.value = 3
       if (isGuest.value) {
         if (!hasGuestAuth.value) {
           error.value = t('payment.guestAuthRequired')
@@ -993,7 +1015,7 @@ export function usePayment() {
           order_password: guestAuth.value.order_password,
           order_no: orderNoResolved.value,
           channel_id: selectedChannelId.value,
-        })
+        }, requestOptions)
         paymentResult.value = response.data.data
         if (paymentResult.value?.pay_url || paymentResult.value?.qr_code) {
           cachedPayment.value = paymentResult.value
@@ -1009,7 +1031,7 @@ export function usePayment() {
         if (requiresOnlineChannel.value && selectedChannelId.value) {
           payload.channel_id = selectedChannelId.value
         }
-        const response = await paymentAPI.create(payload)
+        const response = await paymentAPI.create(payload, requestOptions)
         const created = response.data.data || {}
         if (created.order_paid && !created.payment_id) {
           paymentResult.value = null
@@ -1034,15 +1056,32 @@ export function usePayment() {
         void captureCurrentPayment({ silent: true })
         await loadWallet()
       }
+      protectionStep.value = 4
       window.scrollTo({ top: 0, behavior: 'smooth' })
       if (shouldAutoOpenPaymentLink(paymentResult.value)) {
         openPayLinkInCompatibleWindow(true)
       }
+      protectionOpen.value = false
     } catch (err: any) {
+      if (protectionController?.signal.aborted) return
       error.value = err.message || t('payment.createFailed')
+      protectionError.value = error.value
     } finally {
       submitting.value = false
+      if (!protectionError.value) protectionOpen.value = false
     }
+  }
+
+  const cancelProtection = () => {
+    protectionController?.abort()
+    protectionOpen.value = false
+    protectionError.value = ''
+    submitting.value = false
+  }
+
+  const retryProtection = () => {
+    protectionError.value = ''
+    void performPayment()
   }
 
   const handlePayment = debounceAsync(performPayment, 200)
@@ -1311,6 +1350,7 @@ export function usePayment() {
   })
 
   onUnmounted(() => {
+    protectionController?.abort()
     stopPolling()
     stopCountdown()
     if (redirectTimer.value) {
@@ -1434,6 +1474,12 @@ export function usePayment() {
     restoreCachedPayment,
     handleChangePaymentMethod,
     handlePayment,
+    protectionOpen,
+    protectionStep,
+    protectionTotal: 4,
+    protectionError,
+    cancelProtection,
+    retryProtection,
     handleGuestAuthSubmit,
     handleRefresh,
   }

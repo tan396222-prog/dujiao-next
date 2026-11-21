@@ -1,8 +1,10 @@
 package application
 
 import (
+	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dujiao-next/internal/constants"
 	walletcontract "github.com/dujiao-next/internal/modules/wallet/contract"
@@ -112,35 +114,49 @@ func DebitUpTo(repository walletcontract.Repository, input walletcontract.Credit
 		return decimal.Zero, err
 	}
 	before := account.Balance.Decimal.Round(2)
-	if before.LessThanOrEqual(decimal.Zero) {
-		return decimal.Zero, nil
-	}
 	debit := amount
-	if debit.GreaterThan(before) {
+	if before.LessThanOrEqual(decimal.Zero) {
+		debit = decimal.Zero
+	} else if debit.GreaterThan(before) {
 		debit = before
 	}
 	after := before.Sub(debit).Round(2)
-	account.Balance = money.FromDecimal(after)
-	account.UpdatedAt = now
-	if err := repository.UpdateAccount(account); err != nil {
-		return decimal.Zero, walletcontract.ErrAccountUpdateFailed
+	if debit.GreaterThan(decimal.Zero) {
+		account.Balance = money.FromDecimal(after)
+		account.UpdatedAt = now
+		if err := repository.UpdateAccount(account); err != nil {
+			return decimal.Zero, walletcontract.ErrAccountUpdateFailed
+		}
 	}
 	transactionType := strings.TrimSpace(input.Type)
 	if transactionType == "" {
 		transactionType = constants.WalletTxnTypeAdminAdjust
+	}
+	remark := cleanRemark(input.Remark, "余额扣回")
+	if debit.LessThan(amount) {
+		remark = clipWalletRemark(fmt.Sprintf("%s requested=%s recovered=%s shortfall=%s", remark, amount.StringFixed(2), debit.StringFixed(2), amount.Sub(debit).StringFixed(2)))
 	}
 	transaction := &walletdomain.Transaction{
 		UserID: input.UserID, OrderID: input.OrderID,
 		Type: transactionType, Direction: constants.WalletTxnDirectionOut,
 		Amount: money.FromDecimal(debit), BalanceBefore: money.FromDecimal(before),
 		BalanceAfter: money.FromDecimal(after), Currency: normalizeCurrency(input.Currency),
-		Reference: reference, Remark: cleanRemark(input.Remark, "余额扣回"),
+		Reference: reference, Remark: remark,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	if err := repository.CreateTransaction(transaction); err != nil {
 		return decimal.Zero, walletcontract.ErrTransactionCreateFailed
 	}
 	return debit, nil
+}
+
+func clipWalletRemark(value string) string {
+	value = strings.TrimSpace(value)
+	if utf8.RuneCountInString(value) <= 255 {
+		return value
+	}
+	runes := []rune(value)
+	return string(runes[:255])
 }
 
 func (s *Service) changeBalance(

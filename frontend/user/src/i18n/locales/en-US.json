@@ -51,7 +51,8 @@
     "products": "Products",
     "blog": "Blog",
     "notice": "Notice",
-    "about": "About"
+    "about": "About",
+    "feed": "News"
   },
   "vault": {
     "hero": {
@@ -223,8 +224,8 @@
     "skuStockRangePlus": "{min}+ left",
     "stockUnavailable": "This product is currently out of stock and cannot be purchased",
     "stockBelowMinPurchase": "Available stock is below the minimum purchase quantity ({count})",
-    "addCartStockExceeded": "Insufficient stock for this SKU. You can purchase up to {count}",
-    "addCartStockExceededWithCart": "Insufficient stock for this SKU. You can purchase up to {count} ({cartCount} already in cart)",
+    "addCartStockExceeded": "Not enough stock for this option. Please lower the quantity",
+    "addCartStockExceededWithCart": "Not enough stock for this option. Please lower the quantity",
     "addCartLimitExceeded": "This product can be purchased up to {count} per order",
     "addCartLimitExceededWithCart": "This product can be purchased up to {count} per order ({cartCount} already in cart)"
   },
@@ -295,6 +296,7 @@
     "home": "Home",
     "products": "Products",
     "invite": "Invite",
+    "feed": "News",
     "cart": "Cart",
     "me": "Me"
   },
@@ -1183,7 +1185,7 @@
     "checkout": "Checkout",
     "stockOut": "This SKU is out of stock. Please reduce quantity or remove it",
     "stockRemaining": "{count} left for this SKU",
-    "stockExceeded": "Insufficient stock for this SKU. Cart quantity can be up to {count}",
+    "stockExceeded": "Not enough stock for this option. Please lower the quantity",
     "maxPurchaseExceeded": "This product can be purchased up to {count} per order",
     "minPurchaseNotMet": "This product requires at least {count} per order"
   },
@@ -1766,5 +1768,67 @@
     "authInvalid": "Credentials mismatch, please try again",
     "authSubmit": "Save and search",
     "authClear": "Clear saved info"
+  },
+  "paymentProtection": {
+    "title": "Checkout check",
+    "waiting": "Checking, please wait",
+    "step": "Step {current} of {total}",
+    "done": "Done",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "limited": "This source cannot place an order right now",
+    "failed": "The check did not finish, so no order was created",
+    "steps": {
+      "1": "Review this order",
+      "2": "Confirm the source and environment mark with this site",
+      "3": "Let the server check stock, discounts, balance, and risk",
+      "4": "Create the payment request and open checkout"
+    }
+  },
+  "feed": {
+    "title": "News",
+    "subtitle": "Public AI news and reset notices. This page has no personal quota and does not ask for an AI account.",
+    "disclaimer": "Data comes from the public read-only AIHOT API. This store is not an official partner, does not store AI accounts, and does not predict an unpublished reset.",
+    "coverage": "Currently covered: {names}",
+    "loading": "Reading public news",
+    "loadFailed": "Public data could not be read. Checkout and payment are unaffected",
+    "retry": "Read again",
+    "dailyTitle": "Daily summary",
+    "newsTitle": "News",
+    "hotTitle": "Hot topics",
+    "resetsTitle": "Reset notices",
+    "resetsHint": "Only published notices are shown. A time marked as an estimate is not a promise.",
+    "noDaily": "No daily summary right now",
+    "noNews": "No news right now",
+    "noHot": "No hot topics right now",
+    "noReset": "No published notice",
+    "updatedAt": "Updated {time}",
+    "announcedAt": "Announced {time}",
+    "confirmedAt": "Confirmed {time}",
+    "checkedAt": "Checked {time}",
+    "schedule": "Published schedule: {text}",
+    "estimate": "Estimate: {text}",
+    "estimated": "Estimate",
+    "openOriginal": "Original",
+    "openFeed": "AIHOT",
+    "openNotice": "Notice",
+    "openProviderPage": "Open the source page",
+    "statusWithTime": "{status} · last success {time}",
+    "status": {
+      "ok": "Updated",
+      "empty": "Nothing new",
+      "stale": "Upstream is unavailable; showing the last success",
+      "unavailable": "Unavailable",
+      "rate_limited": "Reading too often, backing off",
+      "refused": "The public API refused this read",
+      "disabled": "The news column is turned off"
+    },
+    "providers": {
+      "codex": "Codex",
+      "antigravity": "Antigravity",
+      "claude": "Claude",
+      "grok-bot": "Grok Bot",
+      "grok_bot": "Grok Bot"
+    }
   }
 }

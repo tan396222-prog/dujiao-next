@@ -13,6 +13,7 @@ import { buildSkuDisplayText, normalizeSkuId } from '../utils/sku'
 import { refreshCartStockSnapshots, cartItemPurchaseLimit as itemPurchaseLimit, cartItemPurchaseMin as itemPurchaseMin } from '../utils/cartStock'
 import { getImageUrl } from '../utils/image'
 import { getAffiliateCode, getAffiliateVisitorKey } from '../utils/affiliate'
+import { protectionHeaders, requestProtection } from '../utils/paymentProtection'
 import { saveGuestOrderAuth } from '../utils/guestOrderAuth'
 import ImageCaptcha from '../components/captcha/ImageCaptcha.vue'
 import TurnstileCaptcha from '../components/captcha/TurnstileCaptcha.vue'
@@ -66,6 +67,10 @@ export function useCheckout() {
   const couponCode = ref('')
   const normalizedCouponCode = computed(() => couponCode.value.trim())
   const submitting = ref(false)
+  const protectionOpen = ref(false)
+  const protectionStep = ref(1)
+  const protectionError = ref('')
+  let protectionController: AbortController | null = null
   const error = ref('')
   const preview = ref<any>(null)
   const previewLoading = ref(false)
@@ -819,10 +824,27 @@ export function useCheckout() {
     }
 
     submitting.value = true
+    protectionOpen.value = true
+    protectionError.value = ''
+    protectionStep.value = 1
+    protectionController = new AbortController()
     try {
       await loadPreviewNow()
+      if (protectionController.signal.aborted) return
       if (previewError.value) {
         error.value = previewError.value
+        protectionError.value = previewError.value
+        return
+      }
+      protectionStep.value = 2
+      const precheck = await requestProtection({
+        authenticated: userAuthStore.isAuthenticated,
+        bind: 'checkout',
+        signal: protectionController.signal,
+      })
+      if (precheck.banned) {
+        protectionError.value = t('paymentProtection.limited')
+        error.value = protectionError.value
         return
       }
 
@@ -831,11 +853,13 @@ export function useCheckout() {
         channel_id: requiresOnlineChannel.value ? (selectedChannelId.value || undefined) : undefined,
         use_balance: useBalance.value,
       }
+      const requestOptions = { headers: protectionHeaders(precheck.token), signal: protectionController.signal }
 
       let responseData: any
 
+      protectionStep.value = 3
       if (userAuthStore.isAuthenticated) {
-        const response = await userOrderAPI.createAndPay(payload)
+        const response = await userOrderAPI.createAndPay(payload, requestOptions)
         responseData = response.data.data
       } else {
         const response = await guestOrderAPI.createAndPay({
@@ -843,7 +867,7 @@ export function useCheckout() {
           email: guestEmail.value.trim(),
           order_password: guestPassword.value,
           captcha_payload: getGuestCaptchaPayload(),
-        })
+        }, requestOptions)
         saveGuestOrderAuth({
           email: guestEmail.value.trim(),
           order_password: guestPassword.value,
@@ -858,12 +882,16 @@ export function useCheckout() {
       clearSourceStore()
 
       // Redirect to the existing Payment page which handles all payment display
+      protectionStep.value = 4
       const query = userAuthStore.isAuthenticated
         ? `order_no=${encodeURIComponent(responseData.order_no)}`
         : `guest=1&order_no=${encodeURIComponent(responseData.order_no)}`
       router.push(`/pay?${query}`)
+      protectionOpen.value = false
     } catch (err: any) {
+      if (protectionController?.signal.aborted) return
       error.value = err.message || t('checkout.errors.submitFailed')
+      protectionError.value = error.value
       if (guestCaptchaEnabled.value && captchaProvider.value === 'image') {
         guestImageCaptchaRef.value?.refresh()
       }
@@ -873,7 +901,20 @@ export function useCheckout() {
       }
     } finally {
       submitting.value = false
+      if (!protectionError.value) protectionOpen.value = false
     }
+  }
+
+  const cancelProtection = () => {
+    protectionController?.abort()
+    protectionOpen.value = false
+    protectionError.value = ''
+    submitting.value = false
+  }
+
+  const retryProtection = () => {
+    protectionError.value = ''
+    void handleSubmit()
   }
 
   watch(
@@ -939,6 +980,7 @@ export function useCheckout() {
   onUnmounted(() => {
     debouncedLoadPreview.cancel()
     debouncedLoadOrderPaymentChannels.cancel()
+    protectionController?.abort()
   })
 
   const cartItemKey = (item: CartItem) => `${item.productId}:${normalizeSkuId(item.skuId)}`
@@ -1182,5 +1224,11 @@ export function useCheckout() {
     submitting,
     canSubmit,
     handleSubmit,
+    protectionOpen,
+    protectionStep,
+    protectionTotal: 4,
+    protectionError,
+    cancelProtection,
+    retryProtection,
   }
 }

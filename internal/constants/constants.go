@@ -477,6 +477,7 @@ const (
 
 // 设置键常量
 const (
+	SettingKeyAIFeedConfig             = "ai_feed_config"
 	SettingKeySiteConfig               = "site_config"
 	SettingKeyOrderConfig              = "order_config"
 	SettingKeySMTPConfig               = "smtp_config"

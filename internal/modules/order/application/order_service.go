@@ -147,6 +147,8 @@ type CreateOrderInput struct {
 	AffiliateCode       string
 	AffiliateVisitorKey string
 	ClientIP            string
+	DeviceSignal        string
+	AutomationSignal    string
 	ManualFormData      map[string]jsonmap.JSON
 	SkipRiskControl     bool // 完全跳过风控（下游订单）
 	SkipIPRiskControl   bool // 跳过 IP 维度风控（渠道/Bot 订单）
@@ -163,6 +165,8 @@ type CreateGuestOrderInput struct {
 	AffiliateCode       string
 	AffiliateVisitorKey string
 	ClientIP            string
+	DeviceSignal        string
+	AutomationSignal    string
 	ManualFormData      map[string]jsonmap.JSON
 }
 
@@ -238,6 +242,8 @@ func (s *OrderService) CreateOrder(input CreateOrderInput) (*orderdomain.Order, 
 		AffiliateCode:       input.AffiliateCode,
 		AffiliateVisitorKey: input.AffiliateVisitorKey,
 		ClientIP:            input.ClientIP,
+		DeviceSignal:        input.DeviceSignal,
+		AutomationSignal:    input.AutomationSignal,
 		ManualFormData:      input.ManualFormData,
 		SkipRiskControl:     input.SkipRiskControl,
 		SkipIPRiskControl:   input.SkipIPRiskControl,
@@ -266,6 +272,8 @@ func (s *OrderService) CreateGuestOrder(input CreateGuestOrderInput) (*orderdoma
 		AffiliateCode:       input.AffiliateCode,
 		AffiliateVisitorKey: input.AffiliateVisitorKey,
 		ClientIP:            input.ClientIP,
+		DeviceSignal:        input.DeviceSignal,
+		AutomationSignal:    input.AutomationSignal,
 		IsGuest:             true,
 		ManualFormData:      input.ManualFormData,
 	})
@@ -282,6 +290,8 @@ type orderCreateParams struct {
 	AffiliateCode            string
 	AffiliateVisitorKey      string
 	ClientIP                 string
+	DeviceSignal             string
+	AutomationSignal         string
 	RiskIP                   string
 	RiskPaymentExpireMinutes int
 	RiskCheckResult          orderriskcontract.CheckResult
@@ -813,6 +823,8 @@ func buildRiskCheckInput(input orderCreateParams, consumeRateLimit bool) orderri
 		IsGuest:          input.IsGuest,
 		SkipIPCheck:      input.SkipIPRiskControl,
 		ConsumeRateLimit: consumeRateLimit,
+		DeviceSignal:     input.DeviceSignal,
+		AutomationSignal: input.AutomationSignal,
 		Items:            items,
 	}
 }

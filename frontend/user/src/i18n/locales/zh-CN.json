@@ -51,7 +51,8 @@
     "products": "商品中心",
     "blog": "博客",
     "notice": "公告",
-    "about": "关于"
+    "about": "关于",
+    "feed": "资讯"
   },
   "vault": {
     "hero": {
@@ -248,6 +249,7 @@
     "home": "首页",
     "products": "商品",
     "invite": "邀请",
+    "feed": "资讯",
     "cart": "购物车",
     "me": "我的"
   },
@@ -1136,7 +1138,7 @@
     "checkout": "去结算",
     "stockOut": "该规格已售罄，请减少数量或移除",
     "stockRemaining": "该规格剩余 {count} 件",
-    "stockExceeded": "该规格库存不足，当前购物车最多 {count} 件",
+    "stockExceeded": "该规格库存不足，请减少数量",
     "maxPurchaseExceeded": "该商品单次下单最多可购买 {count} 件",
     "minPurchaseNotMet": "该商品单次下单至少需购买 {count} 件"
   },
@@ -1746,8 +1748,8 @@
     "skuStockRangePlus": "{min}+ 件",
     "stockUnavailable": "当前商品库存不足，暂不可购买",
     "stockBelowMinPurchase": "当前库存不足以满足该商品的最小购买数量（{count} 件）",
-    "addCartStockExceeded": "该规格库存不足，最多可购买 {count} 件",
-    "addCartStockExceededWithCart": "该规格库存不足，最多可购买 {count} 件（购物车中已有 {cartCount} 件）",
+    "addCartStockExceeded": "该规格库存不足，请减少数量",
+    "addCartStockExceededWithCart": "该规格库存不足，请减少数量",
     "addCartLimitExceeded": "当前商品单次最多可购买 {count} 件",
     "addCartLimitExceededWithCart": "当前商品单次最多可购买 {count} 件（购物车中已有 {cartCount} 件）"
   },
@@ -1766,5 +1768,67 @@
     "label": "购买身份",
     "member": "会员购买",
     "guest": "游客可购"
+  },
+  "paymentProtection": {
+    "title": "下单环境检查",
+    "waiting": "正在检查，请耐心等待",
+    "step": "第 {current} 步，共 {total} 步",
+    "done": "完成",
+    "cancel": "取消",
+    "retry": "重试",
+    "limited": "当前来源暂时不能继续下单",
+    "failed": "检查没有完成，订单尚未创建",
+    "steps": {
+      "1": "核对本次订单信息",
+      "2": "向本站确认来源与环境标记",
+      "3": "由服务器校验库存、优惠、余额和风控",
+      "4": "创建支付请求并打开收银台"
+    }
+  },
+  "feed": {
+    "title": "资讯",
+    "subtitle": "公开 AI 新闻和重置公告。这里没有个人额度，也不需要登录 AI 账号。",
+    "disclaimer": "数据来自 AIHOT 公开只读接口。本店不是其官方合作方，不保存 AI 账号，也不预测尚未公布的下一次重置。",
+    "coverage": "当前覆盖：{names}",
+    "loading": "正在读取公开资讯",
+    "loadFailed": "暂时没有读到公开数据，支付和下单不受影响",
+    "retry": "重新读取",
+    "dailyTitle": "每日摘要",
+    "newsTitle": "新闻",
+    "hotTitle": "热门话题",
+    "resetsTitle": "重置公告",
+    "resetsHint": "只展示已经发布的公告。标注预计的时间不是精确承诺。",
+    "noDaily": "当前没有每日摘要",
+    "noNews": "当前没有新闻",
+    "noHot": "当前没有热门话题",
+    "noReset": "暂无已发布公告",
+    "updatedAt": "更新于 {time}",
+    "announcedAt": "公告时间 {time}",
+    "confirmedAt": "确认时间 {time}",
+    "checkedAt": "本次核对 {time}",
+    "schedule": "公告安排：{text}",
+    "estimate": "预计：{text}",
+    "estimated": "预计",
+    "openOriginal": "原文",
+    "openFeed": "AIHOT",
+    "openNotice": "公告原文",
+    "openProviderPage": "查看该来源页面",
+    "statusWithTime": "{status} · 上次成功 {time}",
+    "status": {
+      "ok": "已更新",
+      "empty": "没有新内容",
+      "stale": "上游暂时不可用，保留上次成功内容",
+      "unavailable": "暂时不可用",
+      "rate_limited": "读取过于频繁，正在退避",
+      "refused": "公开接口拒绝了这次读取",
+      "disabled": "资讯栏目已关闭"
+    },
+    "providers": {
+      "codex": "Codex",
+      "antigravity": "Antigravity",
+      "claude": "Claude",
+      "grok-bot": "Grok Bot",
+      "grok_bot": "Grok Bot"
+    }
   }
 }

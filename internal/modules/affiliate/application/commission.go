@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	orderdomain "github.com/dujiao-next/internal/modules/order/domain"
 
@@ -270,6 +271,10 @@ func (s *Service) HandleOrderRefunded(
 			continue
 		}
 
+		reversalMarker := fmt.Sprintf("reversal=%d:%s:%s", item.ID, before.StringFixed(2), delta.StringFixed(2))
+		if strings.Contains(item.InvalidReason, reversalMarker) {
+			continue
+		}
 		currentCommission := item.CommissionAmount.Decimal.Round(2)
 		if currentCommission.LessThanOrEqual(decimal.Zero) {
 			item.Status = constants.AffiliateCommissionStatusRejected
@@ -285,13 +290,16 @@ func (s *Service) HandleOrderRefunded(
 
 		// 按“本次退款金额 / 当前剩余未退款金额”比例扣减当前佣金，避免多次退款时重复放大扣减。
 		deduct := currentCommission.Mul(delta).Div(remaining).Round(2)
+		recovered := decimal.Zero
+		walletAttempted := false
 		if item.Status == constants.AffiliateCommissionStatusWalletCredited && wallets != nil && deduct.GreaterThan(decimal.Zero) {
 			profile, profileErr := repoTx.GetProfileByID(item.AffiliateProfileID)
 			if profileErr != nil {
 				return profileErr
 			}
 			if profile != nil && profile.UserID > 0 {
-				if _, debitErr := walletapp.DebitUpTo(wallets, walletcontract.CreditInput{
+				walletAttempted = true
+				debited, debitErr := walletapp.DebitUpTo(wallets, walletcontract.CreditInput{
 					UserID:    profile.UserID,
 					Amount:    money.FromDecimal(deduct),
 					Currency:  order.Currency,
@@ -299,9 +307,11 @@ func (s *Service) HandleOrderRefunded(
 					Reference: fmt.Sprintf("affiliate-commission-reversal:%d:%s:%s", item.ID, before.StringFixed(2), delta.StringFixed(2)),
 					Remark:    "订单退款冲回推广佣金",
 					OrderID:   &order.ID,
-				}); debitErr != nil {
+				})
+				if debitErr != nil {
 					return debitErr
 				}
+				recovered = debited.Round(2)
 			}
 		}
 		nextCommission := currentCommission.Sub(deduct).Round(2)
@@ -321,9 +331,19 @@ func (s *Service) HandleOrderRefunded(
 		item.CommissionAmount = money.FromDecimal(nextCommission)
 		item.BaseAmount = money.FromDecimal(nextBase)
 		item.UpdatedAt = now
+		auditReason := strings.TrimSpace(item.InvalidReason)
+		if auditReason == "" {
+			auditReason = reasonText
+		}
+		if !strings.Contains(auditReason, reversalMarker) {
+			auditReason = strings.TrimSpace(auditReason + " " + reversalMarker)
+		}
+		if walletAttempted && recovered.LessThan(deduct) {
+			auditReason = strings.TrimSpace(auditReason + " wallet_shortfall=" + deduct.Sub(recovered).StringFixed(2))
+		}
+		item.InvalidReason = clipAuditReason(auditReason)
 		if nextCommission.LessThanOrEqual(decimal.Zero) {
 			item.Status = constants.AffiliateCommissionStatusRejected
-			item.InvalidReason = reasonText
 			item.ConfirmAt = nil
 			item.AvailableAt = nil
 		}
@@ -551,4 +571,12 @@ func buildSplitCommissionType(sourceID uint) string {
 		return result[:20]
 	}
 	return result
+}
+
+func clipAuditReason(value string) string {
+	value = strings.TrimSpace(value)
+	if utf8.RuneCountInString(value) <= 255 {
+		return value
+	}
+	return string([]rune(value)[:255])
 }

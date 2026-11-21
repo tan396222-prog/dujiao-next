@@ -6,6 +6,28 @@ import (
 	"github.com/dujiao-next/internal/shared/jsonmap"
 )
 
+func TestDefaultOrderAttemptLimitIsTemporaryAndIndependent(t *testing.T) {
+	cfg := DefaultOrderRiskControlConfig()
+	if cfg.Enabled {
+		t.Fatal("master switch must stay off so pending-order quotas do not change")
+	}
+	limit := cfg.Common.AttemptLimit
+	if !limit.Enabled || limit.WindowSeconds != 60 || limit.MaxRequests != 20 || limit.BlockSeconds != 86400 {
+		t.Fatalf("attempt limit = %+v, want enabled 60/20/86400", limit)
+	}
+}
+
+func TestDecodeOrderRiskControlConfig_KeepsAttemptLimitWhenFieldMissing(t *testing.T) {
+	cfg := DecodeOrderRiskControlConfig(jsonmap.JSON{
+		"enabled": false,
+		"common":  map[string]interface{}{"ip_blacklist": []interface{}{}},
+		"guest":   map[string]interface{}{"enabled": true},
+	}, DefaultOrderRiskControlConfig())
+	if !cfg.Common.AttemptLimit.Enabled || cfg.Common.AttemptLimit.MaxRequests != 20 || cfg.Common.AttemptLimit.BlockSeconds != 86400 {
+		t.Fatalf("missing attempt_limit must keep the default, got %+v", cfg.Common.AttemptLimit)
+	}
+}
+
 func TestNormalizeOrderRiskControlConfig_Defaults(t *testing.T) {
 	cfg := NormalizeOrderRiskControlConfig(OrderRiskControlConfig{
 		Guest: OrderRiskGuestPolicy{

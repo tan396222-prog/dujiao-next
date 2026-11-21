@@ -30,6 +30,7 @@ import (
 	memberleveltransport "github.com/dujiao-next/internal/modules/memberlevel/transport/http"
 	notificationtransport "github.com/dujiao-next/internal/modules/notification/transport/http"
 	ordertransport "github.com/dujiao-next/internal/modules/order/transport/http"
+	orderrisktransport "github.com/dujiao-next/internal/modules/orderrisk/transport/http"
 	paymenttransport "github.com/dujiao-next/internal/modules/payment/transport/http"
 	procurementtransport "github.com/dujiao-next/internal/modules/procurement/transport/http"
 	promotiontransport "github.com/dujiao-next/internal/modules/promotion/transport/http"
@@ -121,6 +122,7 @@ func registerAdminRoutes(
 
 	// 设置管理
 	settingstransport.RegisterAdminRoutes(authorized, adminSettingsHandler)
+	orderrisktransport.RegisterAdminRoutes(authorized, orderrisktransport.NewAdminHandler(c.OrderRiskControlService))
 	settingstransport.RegisterAdminSMTPRoutes(authorized, settingsbootstrap.NewSMTPHandler(c, cfg))
 	settingstransport.RegisterAdminCaptchaRoutes(authorized, settingsbootstrap.NewCaptchaHandler(c, cfg))
 	settingstransport.RegisterAdminTelegramAuthRoutes(authorized, settingsbootstrap.NewTelegramAuthHandler(c, cfg))

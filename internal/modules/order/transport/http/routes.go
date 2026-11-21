@@ -90,6 +90,7 @@ func RegisterUserCreateRoute(user gin.IRoutes, handler *CreateHandler) {
 		panic("order user create route: required dependency is nil")
 	}
 	user.POST("/orders", handler.CreateOrder)
+	user.POST("/orders/protection-precheck", handler.PrecheckCheckout)
 }
 
 // RegisterUserCreateAndPayRoute 注册前台用户创建订单并发起支付路由。
@@ -106,6 +107,7 @@ func RegisterGuestCreateRoute(guest gin.IRoutes, handler *CreateHandler) {
 		panic("order guest create route: required dependency is nil")
 	}
 	guest.POST("/orders", handler.CreateGuestOrder)
+	guest.POST("/orders/protection-precheck", handler.PrecheckCheckout)
 }
 
 // RegisterGuestCreateAndPayRoute 注册前台游客创建订单并发起支付路由。

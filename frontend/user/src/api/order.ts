@@ -44,8 +44,9 @@ function withGuestAuth(input: GuestAuthInput, options: Record<string, any> = {})
 export const userOrderAPI = {
     preview: (data: any) => userApi.post('/orders/preview', data),
     getPaymentChannels: (data: any) => userApi.post('/order/payment-channels', data),
-    create: (data: any) => userApi.post('/orders', data),
-    createAndPay: (data: any) => userApi.post('/orders/create-and-pay', data),
+    create: (data: any, options?: any) => userApi.post('/orders', data, options),
+    createAndPay: (data: any, options?: any) => userApi.post('/orders/create-and-pay', data, options),
+    precheck: (data: any, options?: any) => userApi.post('/orders/protection-precheck', data, options),
     list: (params?: any) => userApi.get('/orders', { params }),
     stats: (params?: any) => userApi.get('/orders/stats', { params }),
     detail: (orderNo: string, options?: any) => userApi.get(`/orders/${encodeURIComponent(orderNo)}`, options),
@@ -55,8 +56,9 @@ export const userOrderAPI = {
 
 export const guestOrderAPI = {
     preview: (data: any) => userApi.post('/guest/orders/preview', data),
-    create: (data: any) => userApi.post('/guest/orders', data),
-    createAndPay: (data: any) => userApi.post('/guest/orders/create-and-pay', data),
+    create: (data: any, options?: any) => userApi.post('/guest/orders', data, options),
+    createAndPay: (data: any, options?: any) => userApi.post('/guest/orders/create-and-pay', data, options),
+    precheck: (data: any, options?: any) => userApi.post('/guest/orders/protection-precheck', data, options),
     list: (params: GuestAuthInput) => {
         const request = withGuestAuth(params)
         return userApi.get('/guest/orders', { ...request.options, params: request.payload })
@@ -69,8 +71,8 @@ export const guestOrderAPI = {
         const request = withGuestAuth(params, { blob: true })
         return userApi.get(`/guest/orders/${encodeURIComponent(orderNo)}/fulfillment/download`, { ...request.options, params: request.payload })
     },
-    createPayment: (data: GuestAuthInput) => {
-        const request = withGuestAuth(data)
+    createPayment: (data: GuestAuthInput, options: Record<string, any> = {}) => {
+        const request = withGuestAuth(data, options)
         return userApi.post('/guest/payments', request.payload, request.options)
     },
     capturePayment: (id: number, data: GuestAuthInput) => {
@@ -84,7 +86,7 @@ export const guestOrderAPI = {
 }
 
 export const paymentAPI = {
-    create: (data: CreatePaymentPayload) => userApi.post('/payments', data),
+    create: (data: CreatePaymentPayload, options?: any) => userApi.post('/payments', data, options),
     capture: (id: number) => userApi.post(`/payments/${id}/capture`),
     latest: (params: any) => userApi.get('/payments/latest', { params, silentBusinessError: true }),
 }

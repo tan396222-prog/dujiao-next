@@ -353,6 +353,8 @@ func (a orderCreateAdapter) CreateOrder(input ordertransport.CreateOrderInput) (
 		AffiliateCode:       input.AffiliateCode,
 		AffiliateVisitorKey: input.AffiliateVisitorKey,
 		ClientIP:            input.ClientIP,
+		DeviceSignal:        input.DeviceSignal,
+		AutomationSignal:    input.AutomationSignal,
 		ManualFormData:      input.ManualFormData,
 	})
 	return order, mapOrderTransportError(err)
@@ -369,6 +371,8 @@ func (a orderCreateAdapter) CreateGuestOrder(input ordertransport.CreateGuestOrd
 		AffiliateCode:       input.AffiliateCode,
 		AffiliateVisitorKey: input.AffiliateVisitorKey,
 		ClientIP:            input.ClientIP,
+		DeviceSignal:        input.DeviceSignal,
+		AutomationSignal:    input.AutomationSignal,
 		ManualFormData:      input.ManualFormData,
 	})
 	return order, mapOrderTransportError(err)

@@ -384,7 +384,7 @@ func (c *Consumer) schedulePresaleAutoFulfill(orderID uint) bool {
 		queue.OrderAutoFulfillPayload{OrderID: orderID},
 		asynq.ProcessIn(5*time.Minute),
 		asynq.MaxRetry(0),
-		asynq.TaskID(fmt.Sprintf("presale-auto-fulfill:%d", orderID)),
+		asynq.TaskID(fmt.Sprintf("presale-auto-fulfill:%d:%d", orderID, time.Now().Unix()/60)),
 	)
 	return err == nil || errors.Is(err, asynq.ErrTaskIDConflict) || errors.Is(err, asynq.ErrDuplicateTask)
 }

@@ -1,6 +1,7 @@
 package integrationtest
 
 import (
+	"strings"
 	"testing"
 
 	productdomain "github.com/dujiao-next/internal/modules/catalog/product/domain"
@@ -195,6 +196,17 @@ func TestCommissionWalletCreditIsIdempotentAndRefundClawsBack(t *testing.T) {
 	if got.CommissionAmount.Decimal.String() != "10" || got.Status != constants.AffiliateCommissionStatusWalletCredited {
 		t.Fatalf("partial commission = %+v", got)
 	}
+	if err := svc.HandleOrderRefunded(store, walletStore, order, decimal.NewFromInt(50), decimal.Zero, "partial"); err != nil {
+		t.Fatalf("repeat partial refund: %v", err)
+	}
+	account, _ = walletStore.GetAccountByUserID(promoterID)
+	if !account.Balance.Decimal.Equal(decimal.NewFromInt(10)) {
+		t.Fatalf("repeat partial refund clawed back again, balance %s", account.Balance.Decimal)
+	}
+	got, _ = store.GetCommissionByOrderAndProfile(order.ID, profileID, constants.AffiliateCommissionTypeOrder)
+	if got.CommissionAmount.Decimal.String() != "10" {
+		t.Fatalf("repeat partial refund changed commission to %s", got.CommissionAmount.Decimal)
+	}
 
 	account.Balance = money.FromDecimal(decimal.NewFromInt(1))
 	if err := db.Save(account).Error; err != nil {
@@ -210,6 +222,16 @@ func TestCommissionWalletCreditIsIdempotentAndRefundClawsBack(t *testing.T) {
 	got, _ = store.GetCommissionByOrderAndProfile(order.ID, profileID, constants.AffiliateCommissionTypeOrder)
 	if got.Status != constants.AffiliateCommissionStatusRejected {
 		t.Fatalf("fully refunded commission status %s", got.Status)
+	}
+	if !strings.Contains(got.InvalidReason, "wallet_shortfall=") || !strings.Contains(got.InvalidReason, "reversal=") {
+		t.Fatalf("shortfall was not audited: %s", got.InvalidReason)
+	}
+	if err := svc.HandleOrderRefunded(store, walletStore, order, decimal.NewFromInt(50), decimal.NewFromInt(50), "rest"); err != nil {
+		t.Fatalf("repeat short refund: %v", err)
+	}
+	account, _ = walletStore.GetAccountByUserID(promoterID)
+	if !account.Balance.Decimal.Equal(decimal.Zero) {
+		t.Fatalf("repeat short refund changed balance to %s", account.Balance.Decimal)
 	}
 }
 

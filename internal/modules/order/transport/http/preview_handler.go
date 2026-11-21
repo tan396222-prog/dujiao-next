@@ -122,6 +122,8 @@ type CreateOrderInput struct {
 	AffiliateCode       string
 	AffiliateVisitorKey string
 	ClientIP            string
+	DeviceSignal        string
+	AutomationSignal    string
 	ManualFormData      map[string]jsonmap.JSON
 }
 
@@ -136,6 +138,8 @@ type CreateGuestOrderInput struct {
 	AffiliateCode       string
 	AffiliateVisitorKey string
 	ClientIP            string
+	DeviceSignal        string
+	AutomationSignal    string
 	ManualFormData      map[string]jsonmap.JSON
 }
 

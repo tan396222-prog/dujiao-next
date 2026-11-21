@@ -1,4 +1,5 @@
 <template>
+  <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
   <div class="min-h-screen bg-background text-foreground pt-24 pb-16">
     <div class="container mx-auto px-4">
       <div class="mb-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
@@ -503,6 +504,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { usePayment } from '../composables/usePayment'
+import PaymentProtectionDialog from '../components/payment/PaymentProtectionDialog.vue'
 
 const { t } = useI18n()
 
@@ -519,6 +521,6 @@ const {
   paymentWalletPaidDisplay, paymentOnlinePayDisplay, isChannelDisabledForAmount, channelAmountLimitHint, canSubmitPayment,
   formatDate, statusLabel, formatMoney, hasDiscountAmount, formatDiscountMoney, getLocalizedText, orderItemSkuText, fulfillmentTypeLabelText,
   handleCopyPayLink, handleCopyWalletAddress, handleOpenPayLink, restoreCachedPayment, handleChangePaymentMethod,
-  handlePayment, handleGuestAuthSubmit, handleRefresh,
+  handlePayment, protectionOpen, protectionStep, protectionTotal, protectionError, cancelProtection, retryProtection, handleGuestAuthSubmit, handleRefresh,
 } = usePayment()
 </script>

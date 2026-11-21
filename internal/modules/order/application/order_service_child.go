@@ -73,28 +73,8 @@ func (s *OrderService) cancelOrderWithChildren(order *orderdomain.Order, rollbac
 		}
 
 		if rollbackCoupon {
-			couponRepo := tx.Coupons()
-			usageRepo := tx.CouponUsages()
-			usages, err := usageRepo.ListByOrderID(order.ID)
-			if err != nil {
+			if err := rollbackOrderCouponUsage(tx, order.ID); err != nil {
 				return err
-			}
-			if len(usages) > 0 {
-				if err := usageRepo.DeleteByOrderID(order.ID); err != nil {
-					return err
-				}
-				counts := make(map[uint]int)
-				for _, usage := range usages {
-					counts[usage.CouponID]++
-				}
-				for couponID, count := range counts {
-					if count <= 0 {
-						continue
-					}
-					if err := couponRepo.DecrementUsedCount(couponID, count); err != nil {
-						return err
-					}
-				}
 			}
 		}
 		if s.walletService != nil {
@@ -384,6 +364,37 @@ func (s *OrderService) completeParentOrderInTx(tx ordercontract.Transaction, ord
 	return nil
 }
 
+func rollbackOrderCouponUsage(tx ordercontract.Transaction, orderID uint) error {
+	if tx == nil || orderID == 0 {
+		return nil
+	}
+	usageRepo := tx.CouponUsages()
+	usages, err := usageRepo.ListByOrderID(orderID)
+	if err != nil {
+		return err
+	}
+	if len(usages) == 0 {
+		return nil
+	}
+	if err := usageRepo.DeleteByOrderID(orderID); err != nil {
+		return err
+	}
+	counts := make(map[uint]int)
+	for _, usage := range usages {
+		counts[usage.CouponID]++
+	}
+	couponRepo := tx.Coupons()
+	for couponID, count := range counts {
+		if count <= 0 {
+			continue
+		}
+		if err := couponRepo.DecrementUsedCount(couponID, count); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *OrderService) cancelSingleOrderInTx(tx ordercontract.Transaction, order *orderdomain.Order, target string, updates map[string]interface{}) error {
 	if order == nil {
 		return ErrOrderNotFound
@@ -403,6 +414,11 @@ func (s *OrderService) cancelSingleOrderInTx(tx ordercontract.Transaction, order
 	}
 	if s.walletService != nil {
 		if _, err := ReleaseWalletBalance(s.walletService, tx, order, constants.WalletTxnTypeOrderRefund, "订单取消退回余额"); err != nil {
+			return err
+		}
+	}
+	if target == constants.OrderStatusCanceled && order.PaidAt == nil {
+		if err := rollbackOrderCouponUsage(tx, order.ID); err != nil {
 			return err
 		}
 	}

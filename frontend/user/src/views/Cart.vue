@@ -79,7 +79,7 @@
                     :value="item.quantity"
                     @change="handleQtyChange(item, $event)"
                     :min="itemPurchaseMin(item)"
-                    :max="itemMaxQuantity(item)"
+                    :max="itemPurchaseLimit(item) || undefined"
                     class="cart-qty-input h-8 w-11 border-none bg-transparent p-0 text-center text-sm font-semibold tabular-nums text-foreground focus:outline-none focus:ring-0"
                   />
                   <button
@@ -147,7 +147,7 @@ const {
   getLocalizedText, formatPrice, totalCurrency,
   cartItems, totalItems, totalAmount,
   cartItemKey, cartItemImage, itemSkuDisplay, itemSubtotal, itemStockHint, quantityWarning,
-  itemPurchaseMin, itemMaxQuantity,
+  itemPurchaseMin, itemPurchaseLimit, itemMaxQuantity,
   removeWithUndo, updateQty, handleQtyChange,
 } = useCart()
 </script>
