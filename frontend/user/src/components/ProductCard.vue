@@ -129,7 +129,7 @@
             {{ tag }}
           </span>
         </span>
-        <span v-if="product.stock_status === 'low_stock'" class="shrink-0 font-medium text-warning">
+        <span class="shrink-0 font-medium" :class="stock.text">
           {{ getStockStatusLabel(product) }}
         </span>
       </div>

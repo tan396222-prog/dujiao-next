@@ -234,6 +234,7 @@ type CreateProductRequest struct {
 	SKUs                []ProductSKURequest      `json:"skus"`
 	PaymentChannelIDs   []uint                   `json:"payment_channel_ids"`
 	IsAffiliateEnabled  *bool                    `json:"is_affiliate_enabled"`
+	CouponSale          *bool                    `json:"coupon_sale"`
 	IsActive            *bool                    `json:"is_active"`
 	SortOrder           int                      `json:"sort_order"`
 }
@@ -307,6 +308,7 @@ func (h *AdminProductHandler) CreateProduct(c *gin.Context) {
 		SKUs:                 toProductSKUInputs(req.SKUs),
 		PaymentChannelIDs:    req.PaymentChannelIDs,
 		IsAffiliateEnabled:   req.IsAffiliateEnabled,
+		CouponSale:           req.CouponSale,
 		IsActive:             req.IsActive,
 		SortOrder:            req.SortOrder,
 	})
@@ -399,6 +401,7 @@ func (h *AdminProductHandler) UpdateProduct(c *gin.Context) {
 		SKUs:                 toProductSKUInputs(req.SKUs),
 		PaymentChannelIDs:    req.PaymentChannelIDs,
 		IsAffiliateEnabled:   req.IsAffiliateEnabled,
+		CouponSale:           req.CouponSale,
 		IsActive:             req.IsActive,
 		SortOrder:            req.SortOrder,
 	})

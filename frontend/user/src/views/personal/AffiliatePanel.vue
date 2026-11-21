@@ -437,6 +437,7 @@ const commissionStatusLabel = (status?: string) => {
   if (status === AFFILIATE_COMMISSION_STATUS_AVAILABLE) return t('personalCenter.affiliate.commissionStatus.available')
   if (status === AFFILIATE_COMMISSION_STATUS_REJECTED) return t('personalCenter.affiliate.commissionStatus.rejected')
   if (status === AFFILIATE_COMMISSION_STATUS_WITHDRAWN) return t('personalCenter.affiliate.commissionStatus.withdrawn')
+  if (status === 'wallet_credited') return t('personalCenter.affiliate.commissionStatus.walletCredited')
   return status || '-'
 }
 

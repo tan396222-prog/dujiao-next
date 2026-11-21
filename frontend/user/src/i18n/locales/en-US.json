@@ -169,6 +169,14 @@
       "lowStockCount": "Low stock ({count} left)",
       "outOfStock": "Sold out"
     },
+    "stockTier": {
+      "low": "Low",
+      "mid": "Medium",
+      "high": "High",
+      "presale": "Low · Presale",
+      "unavailable": "Unavailable"
+    },
+    "presaleNotice": "You can still order when stock is low. Payment starts a presale and nothing is delivered until stock arrives.",
     "fulfillmentType": {
       "manual": "Manual delivery",
       "auto": "Auto fulfillment"
@@ -286,6 +294,7 @@
   "bottomNav": {
     "home": "Home",
     "products": "Products",
+    "invite": "Invite",
     "cart": "Cart",
     "me": "Me"
   },
@@ -572,6 +581,8 @@
         "order_pay": "Order payment",
         "order_refund": "Order refund",
         "gift_card_redeem": "Gift card redeem",
+        "affiliate_commission": "Affiliate commission",
+        "affiliate_commission_reversal": "Affiliate commission reversal",
         "admin_adjust": "Admin adjustment",
         "admin_refund": "Admin refund",
         "order_underpaid_credit": "Underpaid order credit"
@@ -588,7 +599,7 @@
     },
     "affiliate": {
       "title": "Affiliate Center",
-      "subtitle": "Track referrals and commissions, then submit withdraw requests",
+      "subtitle": "Open it to get your invite link. Confirmed commission is added to your shoppable balance.",
       "notOpened": "Affiliate is not enabled for your account yet. Open it to get your unique affiliate ID and promotion URL.",
       "openButton": "Open Affiliate",
       "opening": "Opening...",
@@ -632,7 +643,8 @@
         "pendingConfirm": "Pending Confirm",
         "available": "Available",
         "rejected": "Rejected",
-        "withdrawn": "Withdrawn"
+        "withdrawn": "Withdrawn",
+        "walletCredited": "Added to balance"
       },
       "withdrawStatus": {
         "pendingReview": "Pending Review",
@@ -1698,13 +1710,15 @@
     "childFulfillmentTitle": "Child fulfillment",
     "childFulfillmentEmpty": "No fulfillment yet",
     "manualSubmissionTitle": "Submitted information",
+    "presalePending": "Presale order. It ships after restock and is not marked delivered at payment.",
     "fulfillmentTitle": "Fulfillment",
     "fulfillmentType": "Type",
     "fulfillmentStatus": "Status",
     "instructionsTitle": "Usage instructions",
     "fulfillmentTypes": {
       "manual": "Manual",
-      "auto": "Auto"
+      "auto": "Auto",
+      "coupon": "Coupon code"
     },
     "fulfillmentStatuses": {
       "pending": "Pending",

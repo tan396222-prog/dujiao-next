@@ -63,6 +63,7 @@
               <Badge :variant="getStockBadgeVariant(product.stock_status)">
                 {{ getStockStatusLabel(product) }}
               </Badge>
+              <p v-if="showPresaleNotice" class="basis-full text-xs font-medium text-warning">{{ t('products.presaleNotice') }}</p>
               <Badge v-for="(tag, index) in product.tags || []" :key="index" variant="neutral">{{ tag }}</Badge>
             </div>
 
@@ -326,7 +327,7 @@ const {
   showSelectedSkuMemberBadge,
   isSkuPurchasable, skuDisplayText, skuStockText, skuStockBadgeClass,
   quantityEffectiveLimit, quantityEffectiveMin, handleQuantityInput,
-  requiresLogin, requiresSKUSelection, canPurchase, cannotPurchaseReason,
+  requiresLogin, requiresSKUSelection, canPurchase, cannotPurchaseReason, showPresaleNotice,
   categoryName, images,
   backToListTo,
   addToCart, buyNow, goLogin, loadProduct,

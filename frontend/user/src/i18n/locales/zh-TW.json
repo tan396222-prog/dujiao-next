@@ -169,6 +169,14 @@
       "lowStockCount": "庫存緊張（剩 {count}）",
       "outOfStock": "售罄"
     },
+    "stockTier": {
+      "low": "少",
+      "mid": "中",
+      "high": "多",
+      "presale": "少·預售",
+      "unavailable": "暫無"
+    },
+    "presaleNotice": "庫存不足仍可下單。付款後進入預售，到貨後才發貨，不會交付空卡密。",
     "fulfillmentType": {
       "manual": "人工交付",
       "auto": "自動交付"
@@ -286,6 +294,7 @@
   "bottomNav": {
     "home": "首頁",
     "products": "商品",
+    "invite": "邀請",
     "cart": "購物車",
     "me": "我的"
   },
@@ -572,6 +581,8 @@
         "order_pay": "訂單支付",
         "order_refund": "訂單退款",
         "gift_card_redeem": "禮品卡兌換",
+        "affiliate_commission": "推廣佣金",
+        "affiliate_commission_reversal": "推廣佣金沖回",
         "admin_adjust": "管理員調帳",
         "admin_refund": "管理員退款",
         "order_underpaid_credit": "訂單收款不足轉入"
@@ -588,7 +599,7 @@
     },
     "affiliate": {
       "title": "推廣返利",
-      "subtitle": "查看推廣數據與佣金，並提交提現申請",
+      "subtitle": "開通後獲得專屬邀請連結。確認後的佣金進入可購物餘額，可直接餘額支付。",
       "notOpened": "你尚未開通推廣返利，開通後可獲得專屬聯盟ID與推廣連結。",
       "openButton": "立即開通",
       "opening": "開通中...",
@@ -632,7 +643,8 @@
         "pendingConfirm": "待確認",
         "available": "可提現",
         "rejected": "已失效",
-        "withdrawn": "已提現"
+        "withdrawn": "已提現",
+        "walletCredited": "已轉入餘額"
       },
       "withdrawStatus": {
         "pendingReview": "待審核",
@@ -1698,13 +1710,15 @@
     "childFulfillmentTitle": "子訂單交付",
     "childFulfillmentEmpty": "暫無交付資訊",
     "manualSubmissionTitle": "提交資訊",
+    "presalePending": "預售訂單，到貨後發貨，付款後不會顯示已交付。",
     "fulfillmentTitle": "交付資訊",
     "fulfillmentType": "類型",
     "fulfillmentStatus": "狀態",
     "instructionsTitle": "使用說明",
     "fulfillmentTypes": {
       "manual": "人工交付",
-      "auto": "自動交付"
+      "auto": "自動交付",
+      "coupon": "優惠碼"
     },
     "fulfillmentStatuses": {
       "pending": "待交付",

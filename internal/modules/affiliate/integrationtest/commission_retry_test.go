@@ -48,8 +48,10 @@ func TestHandleOrderPaidSkipsRefundedOrder(t *testing.T) {
 			profile := createAffiliateTestProfile(t, db, promoter.ID, "PROMO1", constants.AffiliateProfileStatusActive)
 
 			order := &orderdomain.Order{
-				ID: 10, UserID: promoter.ID + 1, Status: tc.status, AffiliateProfileID: &profile.ID,
-				Items: []orderdomain.OrderItem{{ProductID: 1, TotalPrice: money.FromDecimal(decimal.NewFromInt(100))}},
+				ID: 10, UserID: promoter.ID + 1, Status: tc.status, Currency: "CNY", AffiliateProfileID: &profile.ID,
+				TotalAmount:      money.FromDecimal(decimal.NewFromInt(100)),
+				OnlinePaidAmount: money.FromDecimal(decimal.NewFromInt(100)),
+				Items:            []orderdomain.OrderItem{{ProductID: 1, TotalPrice: money.FromDecimal(decimal.NewFromInt(100))}},
 			}
 			store := affiliategormstore.New(db)
 			settings := settingsapp.NewService(memorysettings.New())

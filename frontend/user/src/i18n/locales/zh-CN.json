@@ -169,6 +169,14 @@
       "lowStockCount": "库存紧张（剩 {count}）",
       "outOfStock": "售罄"
     },
+    "stockTier": {
+      "low": "少",
+      "mid": "中",
+      "high": "多",
+      "presale": "少·预售",
+      "unavailable": "暂无"
+    },
+    "presaleNotice": "库存不足仍可下单。付款后进入预售，到货后才发货，不会交付空卡密。",
     "fulfillmentType": {
       "manual": "人工交付",
       "auto": "自动交付"
@@ -239,6 +247,7 @@
   "bottomNav": {
     "home": "首页",
     "products": "商品",
+    "invite": "邀请",
     "cart": "购物车",
     "me": "我的"
   },
@@ -525,6 +534,8 @@
         "order_pay": "订单支付",
         "order_refund": "订单退款",
         "gift_card_redeem": "礼品卡兑换",
+        "affiliate_commission": "推广佣金",
+        "affiliate_commission_reversal": "推广佣金冲回",
         "admin_adjust": "管理员调账",
         "admin_refund": "管理员退款",
         "order_underpaid_credit": "订单收款不足转入"
@@ -541,7 +552,7 @@
     },
     "affiliate": {
       "title": "推广返利",
-      "subtitle": "查看推广数据与佣金，并提交提现申请",
+      "subtitle": "开通后获得专属邀请链接。确认后的佣金进入可购物余额，可直接余额支付。",
       "notOpened": "你还没有开通推广返利，开通后可获得专属联盟ID与推广链接。",
       "openButton": "立即开通",
       "opening": "开通中...",
@@ -585,7 +596,8 @@
         "pendingConfirm": "待确认",
         "available": "可提现",
         "rejected": "已失效",
-        "withdrawn": "已提现"
+        "withdrawn": "已提现",
+        "walletCredited": "已转入余额"
       },
       "withdrawStatus": {
         "pendingReview": "待审核",
@@ -1651,13 +1663,15 @@
     "childFulfillmentTitle": "子订单交付",
     "childFulfillmentEmpty": "暂无交付信息",
     "manualSubmissionTitle": "提交信息",
+    "presalePending": "预售订单，到货后发货，付款后不会显示已交付。",
     "fulfillmentTitle": "交付信息",
     "fulfillmentType": "类型",
     "fulfillmentStatus": "状态",
     "instructionsTitle": "使用说明",
     "fulfillmentTypes": {
       "manual": "人工交付",
-      "auto": "自动交付"
+      "auto": "自动交付",
+      "coupon": "优惠码"
     },
     "fulfillmentStatuses": {
       "pending": "待交付",

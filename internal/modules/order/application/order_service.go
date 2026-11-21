@@ -598,43 +598,69 @@ func (s *OrderService) createOrder(input orderCreateParams) (*orderdomain.Order,
 			if result.AppliedCoupon != nil && plan.CouponDiscount.GreaterThan(decimal.Zero) {
 				childOrder.CouponID = &result.AppliedCoupon.ID
 			}
-			items := []orderdomain.OrderItem{plan.Item}
+			item := plan.Item
+			var reserveSecretIDs []uint
+			if strings.TrimSpace(item.FulfillmentType) == constants.FulfillmentTypeAuto && !item.IsCouponSale() {
+				secretRepo := tx.CardSecrets()
+				rows, err := secretRepo.ListAvailableByProductForUpdate(item.ProductID, item.SKUID, item.Quantity)
+				if err != nil {
+					return err
+				}
+				if len(rows) < item.Quantity {
+					item.MarkPresale()
+				} else {
+					item.ClearPresale()
+					reserveSecretIDs = make([]uint, 0, len(rows))
+					for _, row := range rows {
+						reserveSecretIDs = append(reserveSecretIDs, row.ID)
+					}
+				}
+			}
+			if strings.TrimSpace(item.FulfillmentType) == constants.FulfillmentTypeManual && !item.IsCouponSale() {
+				sku := plan.SKU
+				if productSKURepo != nil && item.SKUID > 0 {
+					freshSKU, err := productSKURepo.GetByID(item.SKUID)
+					if err != nil {
+						return err
+					}
+					if freshSKU != nil {
+						sku = freshSKU
+					}
+				}
+				if manualLineNeedsPresale(plan.Product, sku, item.Quantity) {
+					item.MarkPresale()
+				} else if item.IsPresale() {
+					item.ClearPresale()
+				}
+			}
+			plan.Item = item
+			result.Plans[idx].Item = item
+			items := []orderdomain.OrderItem{item}
 			if err := orderStore.Create(childOrder, items); err != nil {
 				return err
 			}
 			if len(items) > 0 {
 				result.Plans[idx].Item = items[0]
 				plan.Item = items[0]
+				item = items[0]
 				if pricingCtx != nil {
 					pricingCtx.BindCreatedOrderItem(idx, childOrder.ID, items[0].ID)
 				}
 			}
-
-			if strings.TrimSpace(plan.Item.FulfillmentType) == constants.FulfillmentTypeAuto {
-				secretRepo := tx.CardSecrets()
-				rows, err := secretRepo.ListAvailableByProductForUpdate(plan.Item.ProductID, plan.Item.SKUID, plan.Item.Quantity)
+			if len(reserveSecretIDs) > 0 {
+				affected, err := tx.CardSecrets().Reserve(reserveSecretIDs, childOrder.ID, now)
 				if err != nil {
 					return err
 				}
-				if len(rows) < plan.Item.Quantity {
-					return ErrCardSecretInsufficient
-				}
-				ids := make([]uint, 0, len(rows))
-				for _, row := range rows {
-					ids = append(ids, row.ID)
-				}
-				affected, err := secretRepo.Reserve(ids, childOrder.ID, now)
-				if err != nil {
-					return err
-				}
-				if int(affected) != len(ids) {
+				if int(affected) != len(reserveSecretIDs) {
 					return ErrCardSecretInsufficient
 				}
 			}
-			if strings.TrimSpace(plan.Item.FulfillmentType) == constants.FulfillmentTypeManual &&
+			if strings.TrimSpace(item.FulfillmentType) == constants.FulfillmentTypeManual &&
+				!item.IsPresale() &&
 				plan.SKU != nil &&
 				productdomain.ShouldEnforceManualSKUStock(plan.Product, plan.SKU) {
-				affected, err := productSKURepo.ReserveManualStock(plan.Item.SKUID, plan.Item.Quantity)
+				affected, err := productSKURepo.ReserveManualStock(item.SKUID, item.Quantity)
 				if err != nil {
 					return err
 				}

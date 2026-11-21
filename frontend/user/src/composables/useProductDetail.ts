@@ -11,7 +11,7 @@ import { useUserAuthStore } from '../stores/userAuth'
 import { useUserProfileStore } from '../stores/userProfile'
 import { debounceAsync } from '../utils/debounce'
 import { buildSkuDisplayText, normalizeSkuId } from '../utils/sku'
-import { resolveSkuAvailableStock, resolveSkuStockDisplay, type PublicStockDisplay } from '../utils/publicStock'
+import { allowsBackorder, resolveSkuAvailableStock, resolveSkuStockDisplay, resolveStockTier, stockCapsPurchase, stockTierMessageKey } from '../utils/publicStock'
 import { useLocalized, useProductLabels } from './useProduct'
 import { toast } from './useToast'
 
@@ -217,20 +217,10 @@ export function useProductDetail(options: { onLoaded?: () => void } = {}) {
     return integerValue
   }
 
-  const shouldEnforceSkuStock = (sku: any) => {
-    if (!sku) return false
-    if (sku?.stock_quantity_hidden === true || product.value?.stock_quantity_hidden === true) return false
-    if (product.value?.fulfillment_type === 'auto') return true
-    if (product.value?.fulfillment_type === 'upstream') return true
-    if (product.value?.fulfillment_type !== 'manual') return false
-    const total = normalizeManualStockTotal(sku?.manual_stock_total)
-    if (total === -1) return false
-    return true
-  }
+  const shouldEnforceSkuStock = (sku: any) => Boolean(sku) && stockCapsPurchase(product.value)
 
   const skuAvailableStock = (sku: any) => {
-    if (!sku) return 0
-    if (!shouldEnforceSkuStock(sku) && !sku?.stock_quantity_hidden) return null
+    if (!sku || !shouldEnforceSkuStock(sku)) return sku ? null : 0
     return resolveSkuAvailableStock(product.value, sku)
   }
 
@@ -240,32 +230,7 @@ export function useProductDetail(options: { onLoaded?: () => void } = {}) {
     return available > 0
   }
 
-  const formatSkuStockDisplay = (display: PublicStockDisplay) => {
-    switch (display.kind) {
-      case 'unlimited':
-        return t('productDetail.skuStockUnlimited')
-      case 'out':
-        return t('productDetail.skuStockOut')
-      case 'remaining':
-        return t('productDetail.skuStockRemaining', { count: display.count })
-      case 'low_stock':
-        return t('productDetail.skuStockLow')
-      case 'hidden':
-        return t('productDetail.skuStockHidden')
-      case 'range':
-        return t('productDetail.skuStockRange', { min: display.min, max: display.max })
-      case 'range_plus':
-        return t('productDetail.skuStockRangePlus', { min: display.min })
-      case 'in_stock':
-      default:
-        return t('productDetail.skuStockInStock')
-    }
-  }
-
-  const skuStockText = (sku: any) => {
-    const display = resolveSkuStockDisplay(product.value, sku)
-    return formatSkuStockDisplay(display)
-  }
+  const skuStockText = (sku: any) => t(stockTierMessageKey(resolveStockTier(product.value, sku)))
 
   const skuStockBadgeClass = (sku: any) => {
     const display = resolveSkuStockDisplay(product.value, sku)
@@ -311,12 +276,12 @@ export function useProductDetail(options: { onLoaded?: () => void } = {}) {
     if (limit === null) return false
     return limit < quantityEffectiveMin.value
   })
+  const showPresaleNotice = computed(() => allowsBackorder(product.value) && resolveStockTier(product.value, selectedSku.value) === 'presale')
   const canPurchase = computed(() => {
     if (!product.value) return false
     if (activeSkus.value.length === 0) return false
-    if (product.value.is_sold_out) return false
+    if (!allowsBackorder(product.value) && (product.value.is_sold_out || product.value.stock_status === 'out_of_stock')) return false
     if (requiresSKUSelection.value) return false
-    if (product.value.stock_status === 'out_of_stock') return false
     if (selectedSku.value && !isSkuPurchasable(selectedSku.value)) return false
     if (stockBelowMinPurchase.value) return false
     return true
@@ -722,7 +687,7 @@ export function useProductDetail(options: { onLoaded?: () => void } = {}) {
     isSkuPurchasable, skuDisplayText, skuStockText, skuStockBadgeClass,
     quantityEffectiveLimit, quantityEffectiveMin, handleQuantityInput,
     // 购买能力
-    purchaseType, requiresLogin, requiresSKUSelection, canPurchase, cannotPurchaseReason,
+    purchaseType, requiresLogin, requiresSKUSelection, canPurchase, cannotPurchaseReason, showPresaleNotice,
     categoryName, images,
     backToListTo,
     // 动作

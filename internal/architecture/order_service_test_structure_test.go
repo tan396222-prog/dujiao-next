@@ -26,7 +26,8 @@ func TestOrderServiceTestsAreSplitByResponsibility(t *testing.T) {
 	expected := map[string][]string{
 		filepath.Join(applicationDirectory, "order_service_helpers_test.go"): {
 			"TestMergeCreateOrderItems", "TestMergeCreateOrderItemsConflict",
-			"TestApplyCouponDiscountToItems", "TestResolveManualFormSubmissionPreferOrderItemKey",
+			"TestApplyCouponDiscountToItems", "TestApplyCouponDiscountSkipsCouponSale",
+			"TestManualLineNeedsPresale", "TestResolveManualFormSubmissionPreferOrderItemKey",
 			"TestResolveManualFormSubmissionFallbackLegacyProductKey",
 		},
 		filepath.Join(integrationDirectory, "order_service_cancel_test.go"): {

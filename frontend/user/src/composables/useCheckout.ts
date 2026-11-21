@@ -1039,26 +1039,13 @@ export function useCheckout() {
     return Math.max(integerValue, 0)
   }
 
-  const hasItemStockSnapshot = (item: CartItem) => Boolean(String(item.skuStockSnapshotAt || '').trim())
-
-  const shouldEnforceItemStock = (item: CartItem) => {
-    if (item.skuStockQuantityHidden === true) return false
-    if (item.fulfillmentType === 'auto') return true
-    if (item.fulfillmentType === 'upstream') return true
-    if (item.fulfillmentType !== 'manual') return false
-    if (!hasItemStockSnapshot(item)) return false
-    const total = normalizeManualStockTotal(item.skuManualStockTotal)
-    if (total === -1) return false
-    if (item.skuStockEnforced === true) return true
-    if (item.skuStockEnforced === false) return false
-    return true
-  }
+  const shouldEnforceItemStock = (item: CartItem) => item.skuStockEnforced === true || (item.skuStockEnforced == null && item.fulfillmentType === 'upstream')
 
   const itemAvailableStock = (item: CartItem) => {
+    if (!shouldEnforceItemStock(item)) return null
     if (item.skuStockQuantityHidden === true) {
       return item.skuStockStatus === 'out_of_stock' ? 0 : null
     }
-    if (!shouldEnforceItemStock(item)) return null
     if (item.fulfillmentType === 'upstream') {
       const upstreamStock = Number(item.skuUpstreamStock ?? 0)
       if (upstreamStock === -1) return null // 无限库存
@@ -1106,11 +1093,15 @@ export function useCheckout() {
       if (purchaseLimit !== null && maxQuantity === purchaseLimit && (available === null || purchaseLimit < available)) {
         return t('cart.maxPurchaseExceeded', { count: purchaseLimit })
       }
-      return t('cart.stockExceeded', { count: maxQuantity })
+      if (maxQuantity <= 5) return t('products.stockTier.low')
+      if (maxQuantity <= 20) return t('products.stockTier.mid')
+      return t('products.stockTier.high')
     }
     if (available === null) return ''
-    if (available <= 0) return t('cart.stockOut')
-    return t('cart.stockRemaining', { count: available })
+    if (available <= 0) return t('products.stockTier.unavailable')
+    if (available <= 5) return t('products.stockTier.low')
+    if (available <= 20) return t('products.stockTier.mid')
+    return t('products.stockTier.high')
   }
 
   return {

@@ -67,17 +67,7 @@ const resolveMatchedSku = (item: CartItem, activeSkus: any[]) => {
   return null
 }
 
-const shouldEnforceSkuStock = (product: any, sku: any) => {
-  if (!product || !sku) return false
-  if (sku?.stock_quantity_hidden === true || product?.stock_quantity_hidden === true) return false
-  const type = String(product?.fulfillment_type || '').trim()
-  if (type === 'auto') return true
-  if (type === 'upstream') return true
-  if (type !== 'manual') return false
-  const total = normalizeManualStockTotal(sku?.manual_stock_total)
-  if (total === -1) return false
-  return true
-}
+const shouldEnforceSkuStock = (product: any, sku: any) => Boolean(product && sku) && (product?.backorder === false || (product?.backorder !== true && String(product?.fulfillment_type || '').trim() === 'upstream'))
 
 export const refreshCartStockSnapshots = async (cartStore: CartStoreLike) => {
   const items = Array.isArray(cartStore.items) ? cartStore.items : []

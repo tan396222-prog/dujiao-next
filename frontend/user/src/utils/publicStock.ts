@@ -98,3 +98,76 @@ export const resolveSkuStockDisplay = (product: any, sku: any): PublicStockDispl
   if (status === STOCK_STATUS_LOW_STOCK) return { kind: 'low_stock' }
   return { kind: 'in_stock' }
 }
+
+export type StockTier = 'presale' | 'low' | 'mid' | 'high' | 'unavailable'
+
+// allowsBackorder 人工和自动发货可以在没有库存时下单，付款后等补货再交付。
+export const allowsBackorder = (product: any) => {
+  if (!product) return false
+  if (product.backorder === true) return true
+  if (product.backorder === false) return false
+  const type = String(product.fulfillment_type || 'manual').trim()
+  return type === 'manual' || type === 'auto' || type === ''
+}
+
+// stockCapsPurchase 上游和明确不可预售的商品仍按真实库存限制购买数量。
+export const stockCapsPurchase = (product: any) => {
+  if (!product) return false
+  if (product.backorder === true) return false
+  if (product.backorder === false) return true
+  return String(product.fulfillment_type || '').trim() === 'upstream'
+}
+
+const productStockQuantity = (product: any): number | null => {
+  if (!product) return 0
+  const status = String(product.stock_status || '')
+  if (status === STOCK_STATUS_UNLIMITED) return null
+  if (product.fulfillment_type === 'upstream') {
+    const upstream = Number(product.upstream_stock ?? product.manual_stock_total ?? 0)
+    if (upstream === -1) return null
+    return Math.max(Math.floor(upstream), 0)
+  }
+  if (product.fulfillment_type === 'auto') {
+    const autoStock = Number(product.auto_stock_available ?? 0)
+    if (autoStock < 0) return null
+    return normalizeStockNumber(autoStock)
+  }
+  const total = normalizeManualStockTotal(product.manual_stock_available ?? product.manual_stock_total)
+  if (total === -1) return null
+  return total
+}
+
+export const resolveStockTier = (product: any, sku?: any): StockTier => {
+  const status = String((sku || product)?.stock_status || product?.stock_status || '')
+  if (isQuantityHidden(product, sku)) {
+    if (status === STOCK_STATUS_OUT_OF_STOCK) return allowsBackorder(product) ? 'presale' : 'unavailable'
+    if (status === STOCK_STATUS_LOW_STOCK) return 'low'
+    return 'high'
+  }
+  const available = sku ? resolveSkuAvailableStock(product, sku) : productStockQuantity(product)
+  if (available === null) {
+    if (status === STOCK_STATUS_UNLIMITED) return 'high'
+    if (status === STOCK_STATUS_OUT_OF_STOCK) return allowsBackorder(product) ? 'presale' : 'unavailable'
+    if (status === STOCK_STATUS_LOW_STOCK) return 'low'
+    return 'high'
+  }
+  if (available <= 0) return allowsBackorder(product) ? 'presale' : 'unavailable'
+  if (available <= 5) return 'low'
+  if (available <= 20) return 'mid'
+  return 'high'
+}
+
+export const stockTierMessageKey = (tier: StockTier) => {
+  switch (tier) {
+    case 'presale':
+      return 'products.stockTier.presale'
+    case 'low':
+      return 'products.stockTier.low'
+    case 'mid':
+      return 'products.stockTier.mid'
+    case 'unavailable':
+      return 'products.stockTier.unavailable'
+    default:
+      return 'products.stockTier.high'
+  }
+}
