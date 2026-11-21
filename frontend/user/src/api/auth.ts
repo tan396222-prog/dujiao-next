@@ -38,5 +38,5 @@ export const captchaAPI = {
 }
 
 export const configAPI = {
-    get: () => api.get('/public/config'),
+    get: (options?: { timeout?: number }) => api.get('/public/config', options),
 }

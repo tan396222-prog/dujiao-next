@@ -3,6 +3,7 @@ package domain
 import (
 	"time"
 
+	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/shared/jsonmap"
 	"github.com/dujiao-next/internal/shared/jsonslice"
 	"github.com/dujiao-next/internal/shared/money"
@@ -41,4 +42,65 @@ type OrderItem struct {
 // TableName 指定表名
 func (OrderItem) TableName() string {
 	return "order_items"
+}
+
+const (
+	orderItemPresaleKey    = "presale"
+	orderItemCouponSaleKey = "coupon_sale"
+)
+
+// MarkPresale 记录这行在下单时没有可锁定的库存，付款后等待补货再交付。
+func (item *OrderItem) MarkPresale() {
+	if item == nil {
+		return
+	}
+	if item.SKUSnapshotJSON == nil {
+		item.SKUSnapshotJSON = jsonmap.JSON{}
+	}
+	item.SKUSnapshotJSON[orderItemPresaleKey] = true
+}
+
+// ClearPresale 去掉预售标记，库存重新足够时改回正常占用。
+func (item *OrderItem) ClearPresale() {
+	if item == nil || item.SKUSnapshotJSON == nil {
+		return
+	}
+	delete(item.SKUSnapshotJSON, orderItemPresaleKey)
+}
+
+// IsPresale 判断订单项是否为未锁库存的预售。
+func (item OrderItem) IsPresale() bool {
+	return jsonSnapshotFlag(item.SKUSnapshotJSON, orderItemPresaleKey)
+}
+
+// MarkCouponSale 记录这行购买的是一次性九折券。
+func (item *OrderItem) MarkCouponSale() {
+	if item == nil {
+		return
+	}
+	if item.SKUSnapshotJSON == nil {
+		item.SKUSnapshotJSON = jsonmap.JSON{}
+	}
+	item.SKUSnapshotJSON[orderItemCouponSaleKey] = true
+	item.FulfillmentType = constants.FulfillmentTypeCoupon
+}
+
+// IsCouponSale 判断订单项是否为售券商品。
+func (item OrderItem) IsCouponSale() bool {
+	if item.FulfillmentType == constants.FulfillmentTypeCoupon {
+		return true
+	}
+	return jsonSnapshotFlag(item.SKUSnapshotJSON, orderItemCouponSaleKey)
+}
+
+func jsonSnapshotFlag(snapshot jsonmap.JSON, key string) bool {
+	if snapshot == nil {
+		return false
+	}
+	value, ok := snapshot[key]
+	if !ok {
+		return false
+	}
+	flag, ok := value.(bool)
+	return ok && flag
 }

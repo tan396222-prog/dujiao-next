@@ -27,6 +27,7 @@ type EligibilityItem struct {
 	Quantity          int
 	TotalPrice        money.Amount
 	WholesaleDiscount money.Amount
+	CouponExcluded    bool
 }
 
 type Repository interface {

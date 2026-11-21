@@ -63,7 +63,26 @@ func (s siteConfigStub) UpdateUserSiteConfig(ctx context.Context, userID uint, i
 	if s.err != nil {
 		return nil, s.err
 	}
-	return &resellerdomain.SiteConfig{SiteName: input.SiteName, Logo: input.Logo}, nil
+	return &resellerdomain.SiteConfig{SiteName: input.SiteName, Logo: input.Logo, Wallpaper: input.Wallpaper}, nil
+}
+
+type recordingSiteConfig struct {
+	userID uint
+	calls  int
+	err    error
+}
+
+func (s *recordingSiteConfig) GetUserSiteConfig(userID uint) (*resellerdomain.Profile, *resellerdomain.SiteConfig, bool, error) {
+	return nil, nil, false, s.err
+}
+
+func (s *recordingSiteConfig) UpdateUserSiteConfig(ctx context.Context, userID uint, input resellermodule.ResellerSiteConfigInput) (*resellerdomain.SiteConfig, error) {
+	s.calls++
+	s.userID = userID
+	if s.err != nil {
+		return nil, s.err
+	}
+	return &resellerdomain.SiteConfig{ResellerID: userID, Wallpaper: input.Wallpaper}, nil
 }
 
 type uploadStub struct{}
@@ -147,5 +166,48 @@ func TestUserHandlerSiteConfigUpdateAndGet(t *testing.T) {
 	}
 	if !strings.Contains(recorder.Body.String(), `"site_name":"Alice Store"`) {
 		t.Fatalf("unexpected get body: %s", recorder.Body.String())
+	}
+}
+
+func TestUpdateSiteConfigRejectsAnonymousAndUsesSessionUser(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	stub := &recordingSiteConfig{}
+	h := NewUserHandler(managementStub{}, stub, uploadStub{})
+
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest(http.MethodPut, "/api/v1/user/reseller/site-config", bytes.NewReader([]byte(`{"wallpaper":"/uploads/reseller/2026/11/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.png","reseller_id":99}`)))
+	c.Request.Header.Set("Content-Type", "application/json")
+	h.UpdateSiteConfig(c)
+	if stub.calls != 0 {
+		t.Fatalf("anonymous request reached the site config service")
+	}
+	var resp struct {
+		StatusCode int `json:"status_code"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != response.CodeUnauthorized {
+		t.Fatalf("expected 401, got %+v body=%s", resp, recorder.Body.String())
+	}
+
+	c, recorder = newUserHandlerTestContext(http.MethodPut, "/api/v1/user/reseller/site-config", []byte(`{"site_name":"Mine","reseller_id":99,"wallpaper":"/uploads/reseller/2026/11/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.png"}`), 8)
+	h.UpdateSiteConfig(c)
+	if stub.calls != 1 || stub.userID != 8 {
+		t.Fatalf("update used the wrong owner: calls=%d user=%d", stub.calls, stub.userID)
+	}
+	if !strings.Contains(recorder.Body.String(), `"wallpaper":"/uploads/reseller/2026/11/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.png"`) {
+		t.Fatalf("response leaked or dropped the wallpaper: %s", recorder.Body.String())
+	}
+
+	stub.err = &resellermodule.ResellerSiteConfigFieldError{Field: "wallpaper"}
+	c, recorder = newUserHandlerTestContext(http.MethodPut, "/api/v1/user/reseller/site-config", []byte(`{"wallpaper":"https://evil.example.test/a.png"}`), 8)
+	h.UpdateSiteConfig(c)
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != response.CodeBadRequest {
+		t.Fatalf("expected wallpaper rejection, got %+v body=%s", resp, recorder.Body.String())
 	}
 }

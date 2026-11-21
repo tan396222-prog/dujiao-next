@@ -90,6 +90,9 @@ func (c *Container) initApplicationServices() {
 		Repository: c.WalletRepo, Transactions: c.WalletRepo, RefundConfig: c.SettingService,
 		RefundEmails: walletRefundEmailQueue{client: c.QueueClient},
 	})
+	if c.AffiliateService != nil {
+		c.AffiliateService.SetWallet(c.WalletService, c.WalletRepo)
+	}
 	c.OrderRefundService = orderrefund.New(
 		c.OrderStore,
 		c.UserStore,

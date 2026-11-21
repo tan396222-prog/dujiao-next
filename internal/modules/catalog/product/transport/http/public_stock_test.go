@@ -53,6 +53,31 @@ func TestDecorateProductStock_AutoSkipsInactiveSKUs(t *testing.T) {
 	if item.IsSoldOut {
 		t.Fatalf("expected product not sold out when active sku has stock")
 	}
+	if !item.Backorder {
+		t.Fatal("local auto stock can be ordered before restock")
+	}
+}
+
+func TestDecorateProductStock_ManualZeroStaysPurchasable(t *testing.T) {
+	h := &PublicHandler{}
+	product := &productdomain.Product{
+		ID:              2,
+		FulfillmentType: constants.FulfillmentTypeManual,
+		SKUs: []productdomain.ProductSKU{{
+			ID:               21,
+			SKUCode:          productdomain.DefaultSKUCode,
+			IsActive:         true,
+			ManualStockTotal: 0,
+		}},
+	}
+	item := publicProductView{Product: *product}
+	h.decorateProductStock(product, &item)
+	if !item.Backorder || item.IsSoldOut {
+		t.Fatalf("zero local stock is presale, backorder=%v soldout=%v", item.Backorder, item.IsSoldOut)
+	}
+	if item.StockStatus != constants.ProductStockStatusOutOfStock {
+		t.Fatalf("stock status %s", item.StockStatus)
+	}
 }
 
 func TestPublicProductResponseStatusModeMasksExactStock(t *testing.T) {

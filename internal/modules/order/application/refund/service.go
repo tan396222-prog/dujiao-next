@@ -68,6 +68,7 @@ type Service struct {
 type affiliateRefundProcessor interface {
 	HandleOrderRefunded(
 		store affiliatecontract.Store,
+		wallets walletcontract.Repository,
 		order *orderdomain.Order,
 		refundDelta decimal.Decimal,
 		refundedBefore decimal.Decimal,
@@ -369,6 +370,7 @@ func (s *Service) AdminManualRefund(input AdminManualRefundInput) (*orderdomain.
 		if s.affiliateRefund != nil && order.UserID > 0 {
 			if err := s.affiliateRefund.HandleOrderRefunded(
 				tx.Affiliates(),
+				tx.Wallets().Wallets(),
 				&order,
 				amount,
 				refundedBefore,

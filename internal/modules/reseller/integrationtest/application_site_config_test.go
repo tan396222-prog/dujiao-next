@@ -3,6 +3,11 @@ package integrationtest
 import (
 	"context"
 	"errors"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	resellergormstore "github.com/dujiao-next/internal/modules/reseller/infrastructure/gormstore"
@@ -10,7 +15,9 @@ import (
 	resellerdomain "github.com/dujiao-next/internal/modules/reseller/domain"
 
 	resellermodule "github.com/dujiao-next/internal/modules/reseller/application"
+	resellercontract "github.com/dujiao-next/internal/modules/reseller/contract"
 	"github.com/dujiao-next/internal/shared/jsonmap"
+	"github.com/dujiao-next/internal/shared/storeimage"
 )
 
 func TestResellerSiteConfigServiceUserUpdateRequiresActiveProfile(t *testing.T) {
@@ -255,6 +262,134 @@ func TestResellerSiteConfigServiceOverlayEmitsActiveAnnouncement(t *testing.T) {
 	content := resellerSiteConfigTestMap(announcement["content"])
 	if content["zh-CN"] != "<p>测试测试</p>" {
 		t.Fatalf("unexpected announcement content: %+v", content)
+	}
+}
+
+func TestResellerWallpaperStaysInsideItsOwnStore(t *testing.T) {
+	root := t.TempDir()
+	prev := storeimage.Root
+	storeimage.Root = root
+	t.Cleanup(func() { storeimage.Root = prev })
+
+	mainPath := "/uploads/common/2026/11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.png"
+	alicePath := "/uploads/reseller/2026/11/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.png"
+	bobPath := "/uploads/reseller/2026/11/cccccccc-cccc-4ccc-8ccc-cccccccccccc.png"
+	writeResellerWallpaperPNG(t, root, mainPath)
+	writeResellerWallpaperPNG(t, root, alicePath)
+	writeResellerWallpaperPNG(t, root, bobPath)
+
+	db := openResellerManagementServiceTestDB(t)
+	repo := resellergormstore.New(db)
+	aliceUser := seedResellerManagementUser(t, db, "wallpaper-alice@example.test")
+	bobUser := seedResellerManagementUser(t, db, "wallpaper-bob@example.test")
+	alice := resellerdomain.Profile{UserID: aliceUser.ID, Status: resellerdomain.ProfileStatusActive, SettlementStatus: resellerdomain.SettlementStatusNormal}
+	bob := resellerdomain.Profile{UserID: bobUser.ID, Status: resellerdomain.ProfileStatusActive, SettlementStatus: resellerdomain.SettlementStatusNormal}
+	if err := db.Create(&alice).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&bob).Error; err != nil {
+		t.Fatal(err)
+	}
+	svc := NewResellerSiteConfigService(repo)
+	if _, err := svc.UpdateUserSiteConfig(context.Background(), aliceUser.ID, ResellerSiteConfigInput{
+		SiteName:  "Alice",
+		Wallpaper: alicePath,
+	}); err != nil {
+		t.Fatalf("save alice wallpaper failed: %v", err)
+	}
+	if _, err := svc.UpdateUserSiteConfig(context.Background(), bobUser.ID, ResellerSiteConfigInput{
+		SiteName:  "Bob",
+		Wallpaper: bobPath,
+	}); err != nil {
+		t.Fatalf("save bob wallpaper failed: %v", err)
+	}
+
+	base := map[string]interface{}{
+		"brand": map[string]interface{}{
+			"site_name": "Main",
+			"wallpaper": mainPath,
+		},
+	}
+	aliceOut, err := svc.ApplyPublicConfigOverlay(context.Background(), ResellerTenantContext("alice.example.test", alice.ID, aliceUser.ID, "alice.example.test"), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bobOut, err := svc.ApplyPublicConfigOverlay(context.Background(), ResellerTenantContext("bob.example.test", bob.ID, bobUser.ID, "bob.example.test"), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mainOut, err := svc.ApplyPublicConfigOverlay(context.Background(), resellercontract.MainTenantContext("shop.example.test"), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aliceOut["brand"].(map[string]interface{})["wallpaper"] != alicePath {
+		t.Fatalf("alice store should use her wallpaper, got %+v", aliceOut["brand"])
+	}
+	if bobOut["brand"].(map[string]interface{})["wallpaper"] != bobPath {
+		t.Fatalf("bob store should use his wallpaper, got %+v", bobOut["brand"])
+	}
+	if mainOut["brand"].(map[string]interface{})["wallpaper"] != mainPath {
+		t.Fatalf("main store changed, got %+v", mainOut["brand"])
+	}
+	if base["brand"].(map[string]interface{})["wallpaper"] != mainPath {
+		t.Fatalf("overlay mutated the main config: %+v", base["brand"])
+	}
+
+	if _, err := svc.UpdateUserSiteConfig(context.Background(), aliceUser.ID, ResellerSiteConfigInput{
+		SiteName:  "Alice",
+		Wallpaper: "https://evil.example.test/a.jpg",
+	}); err == nil {
+		t.Fatal("remote wallpaper was accepted")
+	}
+	var fieldErr *ResellerSiteConfigFieldError
+	_, err = svc.UpdateUserSiteConfig(context.Background(), aliceUser.ID, ResellerSiteConfigInput{
+		SiteName:  "Alice",
+		Wallpaper: "/uploads/common/2026/11/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa.svg",
+	})
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "wallpaper" {
+		t.Fatalf("expected wallpaper rejection, got %v", err)
+	}
+	_, row, _, err := svc.GetUserSiteConfig(aliceUser.ID)
+	if err != nil || row == nil || row.Wallpaper != alicePath {
+		t.Fatalf("failed replace lost alice wallpaper: %+v err %v", row, err)
+	}
+	_, bobRow, _, err := svc.GetUserSiteConfig(bobUser.ID)
+	if err != nil || bobRow == nil || bobRow.Wallpaper != bobPath {
+		t.Fatalf("alice update changed bob wallpaper: %+v err %v", bobRow, err)
+	}
+
+	if _, err := svc.UpdateUserSiteConfig(context.Background(), bobUser.ID, ResellerSiteConfigInput{SiteName: "Bob"}); err != nil {
+		t.Fatalf("clear bob wallpaper failed: %v", err)
+	}
+	inherited, err := svc.ApplyPublicConfigOverlay(context.Background(), ResellerTenantContext("bob.example.test", bob.ID, bobUser.ID, "bob.example.test"), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inherited["brand"].(map[string]interface{})["wallpaper"] != mainPath {
+		t.Fatalf("cleared reseller wallpaper should inherit the main site, got %+v", inherited["brand"])
+	}
+	aliceAgain, err := svc.ApplyPublicConfigOverlay(context.Background(), ResellerTenantContext("alice.example.test", alice.ID, aliceUser.ID, "alice.example.test"), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aliceAgain["brand"].(map[string]interface{})["wallpaper"] != alicePath {
+		t.Fatalf("alice wallpaper changed after bob cleared his: %+v", aliceAgain["brand"])
+	}
+}
+
+func writeResellerWallpaperPNG(t *testing.T, root, publicPath string) {
+	t.Helper()
+	full := filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(publicPath, "/uploads/")))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Create(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if err := png.Encode(file, image.NewRGBA(image.Rect(0, 0, 3, 3))); err != nil {
+		t.Fatal(err)
 	}
 }
 

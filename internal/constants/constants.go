@@ -25,6 +25,7 @@ const (
 	FulfillmentTypeAuto        = "auto"
 	FulfillmentTypeManual      = "manual"
 	FulfillmentTypeUpstream    = "upstream"
+	FulfillmentTypeCoupon      = "coupon"
 	FulfillmentStatusPending   = "pending"
 	FulfillmentStatusDelivered = "delivered"
 )
@@ -128,6 +129,10 @@ const (
 	WalletTxnTypeAdminAdjust = "admin_adjust"
 	WalletTxnTypeAdminRefund = "admin_refund"
 	WalletTxnTypeGiftCard    = "gift_card_redeem"
+	// WalletTxnTypeAffiliateCommission 记录推广佣金转入可购物余额。
+	WalletTxnTypeAffiliateCommission = "affiliate_commission"
+	// WalletTxnTypeAffiliateCommissionReversal 记录退款或取消时从可购物余额冲回的推广佣金。
+	WalletTxnTypeAffiliateCommissionReversal = "affiliate_commission_reversal"
 	// WalletTxnTypeOrderUnderpaidCredit 记录"支付成功但金额不足以履约订单"时转入用户余额的款项。
 	WalletTxnTypeOrderUnderpaidCredit = "order_underpaid_credit"
 )
@@ -160,6 +165,8 @@ const (
 	AffiliateCommissionStatusAvailable      = "available"
 	AffiliateCommissionStatusRejected       = "rejected"
 	AffiliateCommissionStatusWithdrawn      = "withdrawn"
+	// AffiliateCommissionStatusWalletCredited 表示佣金已转入可购物余额，不能再从推广账户提现。
+	AffiliateCommissionStatusWalletCredited = "wallet_credited"
 )
 
 // 推广返利佣金类型常量
@@ -277,6 +284,8 @@ const (
 // 适用范围常量
 const (
 	ScopeTypeProduct = "product"
+	// ScopeTypeStore 表示除售券商品外的普通商品，不随新商品失效。
+	ScopeTypeStore = "store"
 )
 
 // 用户状态常量

@@ -50,8 +50,10 @@ func TestAffiliateOrderPaidWorkerCreatesCommission(t *testing.T) {
 		t.Fatalf("init affiliate setting failed: %v", err)
 	}
 	order := &orderdomain.Order{
-		ID: 42, UserID: 2, Status: constants.OrderStatusPaid, AffiliateProfileID: &profile.ID,
-		Items: []orderdomain.OrderItem{{ProductID: 1, TotalPrice: money.FromDecimal(decimal.NewFromInt(100))}},
+		ID: 42, UserID: 2, Status: constants.OrderStatusPaid, Currency: "CNY", AffiliateProfileID: &profile.ID,
+		TotalAmount:      money.FromDecimal(decimal.NewFromInt(100)),
+		OnlinePaidAmount: money.FromDecimal(decimal.NewFromInt(100)),
+		Items:            []orderdomain.OrderItem{{ProductID: 1, TotalPrice: money.FromDecimal(decimal.NewFromInt(100))}},
 	}
 	store := affiliategormstore.New(db)
 	c := New(&container.Container{

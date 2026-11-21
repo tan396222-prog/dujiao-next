@@ -20,6 +20,7 @@ import (
 	"github.com/dujiao-next/internal/shared/contactlink"
 	"github.com/dujiao-next/internal/shared/jsonmap"
 	"github.com/dujiao-next/internal/shared/mailbrand"
+	"github.com/dujiao-next/internal/shared/storeimage"
 )
 
 type LocalizedTextInput map[string]string
@@ -59,6 +60,7 @@ type ResellerSiteConfigInput struct {
 	SiteName     string                    `json:"site_name"`
 	Logo         string                    `json:"logo"`
 	Favicon      string                    `json:"favicon"`
+	Wallpaper    string                    `json:"wallpaper"`
 	Announcement ResellerAnnouncementInput `json:"announcement"`
 	Support      ResellerSupportInput      `json:"support"`
 	SEO          ResellerSEOInput          `json:"seo"`
@@ -246,6 +248,10 @@ func (s *SiteConfigService) buildModel(resellerID uint, input ResellerSiteConfig
 	if err != nil {
 		return nil, newResellerFieldError("image")
 	}
+	wallpaper, err := storeimage.VerifyWallpaper(input.Wallpaper)
+	if err != nil {
+		return nil, newResellerFieldError("wallpaper")
+	}
 	support, err := NormalizeResellerSupport(input.Support)
 	if err != nil {
 		return nil, err
@@ -267,6 +273,7 @@ func (s *SiteConfigService) buildModel(resellerID uint, input ResellerSiteConfig
 		SiteName:         trimLimit(input.SiteName, 120),
 		Logo:             logo,
 		Favicon:          favicon,
+		Wallpaper:        wallpaper,
 		AnnouncementJSON: normalizeResellerAnnouncement(input.Announcement),
 		SupportJSON:      support,
 		SEOJSON:          seo,
@@ -486,6 +493,10 @@ func applyResellerSiteConfigToPublicConfig(out map[string]interface{}, cfg *rese
 	}
 	if cfg.Favicon != "" {
 		brand["site_icon"] = cfg.Favicon
+	}
+	// 代理壁纸为空时保留主站壁纸；主站也没有时前台继续用主题背景。
+	if path := storeimage.PublicWallpaper(cfg.Wallpaper); path != "" {
+		brand["wallpaper"] = path
 	}
 	out["brand"] = brand
 

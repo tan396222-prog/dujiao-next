@@ -1,8 +1,10 @@
 package domain
 
 import (
+	"strings"
 	"time"
 
+	"github.com/dujiao-next/internal/constants"
 	fulfillmentdomain "github.com/dujiao-next/internal/modules/fulfillment/domain"
 	"github.com/dujiao-next/internal/shared/money"
 )
@@ -81,6 +83,19 @@ func (o *Order) MaskUpstreamFulfillmentType() {
 	for i := range o.Children {
 		o.Children[i].MaskUpstreamFulfillmentType()
 	}
+}
+
+// IsCouponSaleOrder 判断订单是否只包含售券商品。
+func (o *Order) IsCouponSaleOrder() bool {
+	if o == nil || len(o.Items) == 0 {
+		return false
+	}
+	for _, item := range o.Items {
+		if strings.TrimSpace(item.FulfillmentType) != constants.FulfillmentTypeCoupon && !item.IsCouponSale() {
+			return false
+		}
+	}
+	return true
 }
 
 // TruncateFulfillmentPayload 截断订单及子订单中超长的交付内容，防止前端渲染崩溃。

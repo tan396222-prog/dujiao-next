@@ -225,14 +225,13 @@ func (s *OrderService) buildOrderResult(input orderCreateParams) (*orderBuildRes
 		if fulfillmentType == "" {
 			fulfillmentType = constants.FulfillmentTypeManual
 		}
-		if fulfillmentType != constants.FulfillmentTypeManual && fulfillmentType != constants.FulfillmentTypeAuto && fulfillmentType != constants.FulfillmentTypeUpstream {
+		if product.CouponSale {
+			fulfillmentType = constants.FulfillmentTypeCoupon
+		}
+		if fulfillmentType != constants.FulfillmentTypeManual && fulfillmentType != constants.FulfillmentTypeAuto && fulfillmentType != constants.FulfillmentTypeUpstream && fulfillmentType != constants.FulfillmentTypeCoupon {
 			return nil, ErrFulfillmentInvalid
 		}
-		if fulfillmentType == constants.FulfillmentTypeManual &&
-			productdomain.ShouldEnforceManualSKUStock(product, sku) &&
-			productdomain.ManualSKUAvailable(sku) < item.Quantity {
-			return nil, ErrManualStockInsufficient
-		}
+		manualPresale := fulfillmentType == constants.FulfillmentTypeManual && manualLineNeedsPresale(product, sku, item.Quantity)
 		if fulfillmentType == constants.FulfillmentTypeUpstream && s.productMappingService != nil {
 			if err := s.productMappingService.EnsureUpstreamStockForOrder(sku.ID, item.Quantity); err != nil {
 				return nil, err
@@ -303,6 +302,12 @@ func (s *OrderService) buildOrderResult(input orderCreateParams) (*orderBuildRes
 			CreatedAt:                    now,
 			UpdatedAt:                    now,
 		}
+		if manualPresale {
+			orderItem.MarkPresale()
+		}
+		if product.CouponSale {
+			orderItem.MarkCouponSale()
+		}
 		orderItems = append(orderItems, orderItem)
 		plans = append(plans, childOrderPlan{
 			Product:           product,
@@ -337,6 +342,7 @@ func (s *OrderService) buildOrderResult(input orderCreateParams) (*orderBuildRes
 				Quantity:          item.Quantity,
 				TotalPrice:        item.TotalPrice,
 				WholesaleDiscount: item.WholesaleDiscount,
+				CouponExcluded:    item.IsCouponSale(),
 			})
 		}
 		discount, coupon, err := couponService.ApplyCoupon(
@@ -479,37 +485,56 @@ func applyCouponDiscountToItems(plans []childOrderPlan, coupon *coupondomain.Cou
 		return nil
 	}
 	scopeType := strings.ToLower(strings.TrimSpace(coupon.ScopeType))
-	if scopeType != constants.ScopeTypeProduct {
-		return couponcontract.ErrScopeInvalid
-	}
-	ids, err := coupondomain.DecodeScopeIDs(coupon.ScopeRefIDs)
-	if err != nil {
-		return couponcontract.ErrScopeInvalid
-	}
-	skuIDs, err := coupondomain.DecodeScopeIDs(coupon.ScopeSKUIDs)
-	if err != nil {
-		return couponcontract.ErrScopeInvalid
-	}
 	eligibleIndexes := make([]int, 0, len(plans))
 	eligibleTotal := decimal.Zero
 	scopeMatched := 0
 	wholesaleExcluded := 0
-	for i := range plans {
-		if _, ok := ids[plans[i].Item.ProductID]; !ok {
-			continue
-		}
-		if len(skuIDs) > 0 {
-			if _, ok := skuIDs[plans[i].Item.SKUID]; !ok {
+	switch scopeType {
+	case constants.ScopeTypeStore:
+		for i := range plans {
+			if plans[i].Product != nil && plans[i].Product.CouponSale {
 				continue
 			}
+			if plans[i].Item.IsCouponSale() {
+				continue
+			}
+			eligibleIndexes = append(eligibleIndexes, i)
+			eligibleTotal = eligibleTotal.Add(plans[i].TotalAmount)
 		}
-		scopeMatched++
-		if coupon.DisabledWholesalePrice && plans[i].WholesaleDiscount.GreaterThan(decimal.Zero) {
-			wholesaleExcluded++
-			continue
+	case constants.ScopeTypeProduct:
+		ids, err := coupondomain.DecodeScopeIDs(coupon.ScopeRefIDs)
+		if err != nil {
+			return couponcontract.ErrScopeInvalid
 		}
-		eligibleIndexes = append(eligibleIndexes, i)
-		eligibleTotal = eligibleTotal.Add(plans[i].TotalAmount)
+		skuIDs, err := coupondomain.DecodeScopeIDs(coupon.ScopeSKUIDs)
+		if err != nil {
+			return couponcontract.ErrScopeInvalid
+		}
+		for i := range plans {
+			if _, ok := ids[plans[i].Item.ProductID]; !ok {
+				continue
+			}
+			if len(skuIDs) > 0 {
+				if _, ok := skuIDs[plans[i].Item.SKUID]; !ok {
+					continue
+				}
+			}
+			scopeMatched++
+			if coupon.DisabledWholesalePrice && plans[i].WholesaleDiscount.GreaterThan(decimal.Zero) {
+				wholesaleExcluded++
+				continue
+			}
+			if plans[i].Product != nil && plans[i].Product.CouponSale {
+				continue
+			}
+			if plans[i].Item.IsCouponSale() {
+				continue
+			}
+			eligibleIndexes = append(eligibleIndexes, i)
+			eligibleTotal = eligibleTotal.Add(plans[i].TotalAmount)
+		}
+	default:
+		return couponcontract.ErrScopeInvalid
 	}
 	if len(eligibleIndexes) == 0 || eligibleTotal.LessThanOrEqual(decimal.Zero) {
 		if scopeMatched > 0 && wholesaleExcluded == scopeMatched {

@@ -84,6 +84,65 @@ func (s *Service) CreditInTransaction(
 	return account, transaction, nil
 }
 
+// DebitUpTo 在调用方已经打开的事务里扣减余额，最多扣到 0。
+// 同一 reference 重复调用返回已经扣过的金额，不会再次扣款。
+func DebitUpTo(repository walletcontract.Repository, input walletcontract.CreditInput) (decimal.Decimal, error) {
+	if repository == nil {
+		return decimal.Zero, walletcontract.ErrTransactionRequired
+	}
+	amount := input.Amount.Decimal.Round(2)
+	if amount.LessThanOrEqual(decimal.Zero) || input.UserID == 0 {
+		return decimal.Zero, nil
+	}
+	reference := strings.TrimSpace(input.Reference)
+	if reference == "" {
+		return decimal.Zero, walletcontract.ErrTransactionCreateFailed
+	}
+	existing, err := repository.GetTransactionByReference(reference)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	if existing != nil {
+		return existing.Amount.Decimal.Round(2), nil
+	}
+
+	now := time.Now()
+	account, err := ensureAccountForUpdate(repository, input.UserID, now)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	before := account.Balance.Decimal.Round(2)
+	if before.LessThanOrEqual(decimal.Zero) {
+		return decimal.Zero, nil
+	}
+	debit := amount
+	if debit.GreaterThan(before) {
+		debit = before
+	}
+	after := before.Sub(debit).Round(2)
+	account.Balance = money.FromDecimal(after)
+	account.UpdatedAt = now
+	if err := repository.UpdateAccount(account); err != nil {
+		return decimal.Zero, walletcontract.ErrAccountUpdateFailed
+	}
+	transactionType := strings.TrimSpace(input.Type)
+	if transactionType == "" {
+		transactionType = constants.WalletTxnTypeAdminAdjust
+	}
+	transaction := &walletdomain.Transaction{
+		UserID: input.UserID, OrderID: input.OrderID,
+		Type: transactionType, Direction: constants.WalletTxnDirectionOut,
+		Amount: money.FromDecimal(debit), BalanceBefore: money.FromDecimal(before),
+		BalanceAfter: money.FromDecimal(after), Currency: normalizeCurrency(input.Currency),
+		Reference: reference, Remark: cleanRemark(input.Remark, "余额扣回"),
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repository.CreateTransaction(transaction); err != nil {
+		return decimal.Zero, walletcontract.ErrTransactionCreateFailed
+	}
+	return debit, nil
+}
+
 func (s *Service) changeBalance(
 	userID uint,
 	delta decimal.Decimal,

@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	productcontract "github.com/dujiao-next/internal/modules/catalog/product/contract"
+	resellermodule "github.com/dujiao-next/internal/modules/reseller/application"
 	resellercontract "github.com/dujiao-next/internal/modules/reseller/contract"
 	"github.com/dujiao-next/internal/platform/http/ginutil"
 	"github.com/dujiao-next/internal/platform/http/response"
@@ -12,6 +13,11 @@ import (
 )
 
 func respondAdminManagementError(c *gin.Context, err error) {
+	var fieldErr *resellermodule.ResellerSiteConfigFieldError
+	if errors.As(err, &fieldErr) && fieldErr.Field == "wallpaper" {
+		ginutil.RespondError(c, response.CodeBadRequest, "error.wallpaper_invalid", nil)
+		return
+	}
 	switch {
 	case errors.Is(err, productcontract.ErrNotFound):
 		ginutil.RespondError(c, response.CodeNotFound, "error.bad_request", nil)

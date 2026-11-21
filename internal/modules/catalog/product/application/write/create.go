@@ -36,6 +36,10 @@ func (s *WriteService) Create(input CreateProductInput) (*productdomain.Product,
 	if input.IsAffiliateEnabled != nil {
 		isAffiliateEnabled = *input.IsAffiliateEnabled
 	}
+	couponSale := false
+	if input.CouponSale != nil {
+		couponSale = *input.CouponSale
+	}
 	purchaseType := productdomain.NormalizePurchaseType(input.PurchaseType)
 	if purchaseType == "" {
 		return nil, productcontract.ErrProductPurchaseInvalid
@@ -120,6 +124,7 @@ func (s *WriteService) Create(input CreateProductInput) (*productdomain.Product,
 		ManualStockSold:      0,
 		PaymentChannelIDs:    productdomain.EncodePaymentChannelIDs(paymentChannelIDs),
 		IsAffiliateEnabled:   isAffiliateEnabled,
+		CouponSale:           couponSale,
 		IsActive:             isActive,
 		SortOrder:            input.SortOrder,
 	}

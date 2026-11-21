@@ -92,8 +92,10 @@ function createClient(injectAuth: boolean) {
             headers['Content-Type'] = 'application/json'
         }
 
+        const requestedTimeout = Number(opts.timeout)
+        const requestTimeout = Number.isFinite(requestedTimeout) && requestedTimeout > 0 ? requestedTimeout : timeout
         const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), timeout)
+        const timer = setTimeout(() => controller.abort(), requestTimeout)
 
         let response: Response
         try {

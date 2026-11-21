@@ -2,6 +2,7 @@
   "common": {
     "siteName": "Dujiao-Next",
     "loading": "加载中...",
+    "loadingRetry": "加载没有完成，点此重试",
     "error": "错误",
     "success": "成功",
     "confirm": "确认",
@@ -168,6 +169,14 @@
       "lowStockCount": "库存紧张（剩 {count}）",
       "outOfStock": "售罄"
     },
+    "stockTier": {
+      "low": "少",
+      "mid": "中",
+      "high": "多",
+      "presale": "少·预售",
+      "unavailable": "暂无"
+    },
+    "presaleNotice": "库存不足仍可下单。付款后进入预售，到货后才发货，不会交付空卡密。",
     "fulfillmentType": {
       "manual": "人工交付",
       "auto": "自动交付"
@@ -238,6 +247,7 @@
   "bottomNav": {
     "home": "首页",
     "products": "商品",
+    "invite": "邀请",
     "cart": "购物车",
     "me": "我的"
   },
@@ -524,6 +534,8 @@
         "order_pay": "订单支付",
         "order_refund": "订单退款",
         "gift_card_redeem": "礼品卡兑换",
+        "affiliate_commission": "推广佣金",
+        "affiliate_commission_reversal": "推广佣金冲回",
         "admin_adjust": "管理员调账",
         "admin_refund": "管理员退款",
         "order_underpaid_credit": "订单收款不足转入"
@@ -540,7 +552,7 @@
     },
     "affiliate": {
       "title": "推广返利",
-      "subtitle": "查看推广数据与佣金，并提交提现申请",
+      "subtitle": "开通后获得专属邀请链接。确认后的佣金进入可购物余额，可直接余额支付。",
       "notOpened": "你还没有开通推广返利，开通后可获得专属联盟ID与推广链接。",
       "openButton": "立即开通",
       "opening": "开通中...",
@@ -584,7 +596,8 @@
         "pendingConfirm": "待确认",
         "available": "可提现",
         "rejected": "已失效",
-        "withdrawn": "已提现"
+        "withdrawn": "已提现",
+        "walletCredited": "已转入余额"
       },
       "withdrawStatus": {
         "pendingReview": "待审核",
@@ -673,7 +686,7 @@
           "announcement": "站点公告"
         },
         "descriptions": {
-          "brand": "设置站点名称、Logo 与浏览器图标",
+          "brand": "设置站点名称、Logo、浏览器图标和本店壁纸",
           "support": "展示在站点的联系入口，留空则不显示",
           "seo": "搜索引擎与社交分享信息，可分语言填写",
           "announcement": "访客进入分销站首页时以弹窗展示的公告",
@@ -719,6 +732,9 @@
         "upload": "上传图片",
         "replace": "更换图片",
         "uploadHint": "支持 JPG / PNG / WebP / GIF / SVG，大小不超过站点限制",
+        "wallpaperHint": "只影响本店。JPG、PNG 或 WebP，最大 8MB，最长边 4096 像素。移除并保存后恢复继承：沿用主站壁纸；主站也没有壁纸时，使用主题原来的背景。不会改动主站或其他代理。",
+        "wallpaperRemove": "移除壁纸",
+        "wallpaperInvalid": "请选择 8MB 以内的 JPG、PNG 或 WebP 图片",
         "uploadFailed": "图片上传失败，请重试",
         "editor": {
           "placeholder": "输入公告内容，可插入图片、链接与排版…",
@@ -748,6 +764,7 @@
           "siteName": "站点名称",
           "logo": "Logo 地址",
           "favicon": "站点图标地址",
+          "wallpaper": "店铺壁纸",
           "telegram": "Telegram",
           "whatsapp": "WhatsApp",
           "email": "客服邮箱",
@@ -1646,13 +1663,15 @@
     "childFulfillmentTitle": "子订单交付",
     "childFulfillmentEmpty": "暂无交付信息",
     "manualSubmissionTitle": "提交信息",
+    "presalePending": "预售订单，到货后发货，付款后不会显示已交付。",
     "fulfillmentTitle": "交付信息",
     "fulfillmentType": "类型",
     "fulfillmentStatus": "状态",
     "instructionsTitle": "使用说明",
     "fulfillmentTypes": {
       "manual": "人工交付",
-      "auto": "自动交付"
+      "auto": "自动交付",
+      "coupon": "优惠码"
     },
     "fulfillmentStatuses": {
       "pending": "待交付",

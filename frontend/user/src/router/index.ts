@@ -369,6 +369,11 @@ router.beforeEach(async (to, _from, next) => {
     }
 })
 
+// 路由组件加载失败时收起全屏加载层，不让结形标志一直转
+router.onError(() => {
+    useAppStore().loading = false
+})
+
 // Update SEO on route change
 router.afterEach(() => {
     const appStore = useAppStore()

@@ -1,0 +1,747 @@
+/*
+ * 浅紫液态玻璃（html[data-skin="crystal"]）。
+ * 表面要能看见背后的色块：低透明度、模糊、亮边、内高光和分层阴影。
+ * classic / vault 的布局不动。去掉 data-skin 或设为 classic 即恢复。
+ * 分销控制台不挂这个属性。没有 backdrop-filter 时改为可读的实色表面。
+ */
+
+@property --crystal-rx {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --crystal-ry {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --crystal-lift {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --crystal-scale {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+html[data-skin="crystal"] {
+  --crystal-ink: #231733;
+  --crystal-ink-soft: #3e3458;
+  --crystal-muted: #5b5274;
+  --crystal-accent: #6a46ae;
+  --crystal-accent-deep: #56368f;
+  --crystal-on-accent: #ffffff;
+  --crystal-line: rgba(255, 255, 255, 0.72);
+  --crystal-line-strong: rgba(122, 78, 190, 0.42);
+  --crystal-blur: blur(22px) saturate(185%);
+  --crystal-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0) 46%), linear-gradient(180deg, #cbb8f4 0%, #7b55c8 48%, #5b3b9e 100%);
+  --crystal-fill-ink: #ffffff;
+  --crystal-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    inset 0 -1px 0 rgba(110, 70, 170, 0.14),
+    inset 0 -18px 32px rgba(126, 86, 190, 0.06),
+    0 1px 1px rgba(255, 255, 255, 0.45),
+    0 14px 28px -16px rgba(86, 48, 150, 0.42),
+    0 32px 54px -30px rgba(64, 32, 120, 0.48);
+  --crystal-pose: perspective(980px) rotateX(var(--crystal-rx, 0deg)) rotateY(var(--crystal-ry, 0deg)) translate3d(0, var(--crystal-lift, 0px), 0) scale(var(--crystal-scale, 1));
+
+  --ui-bg-page: transparent;
+  --ui-bg-elevated: rgba(255, 255, 255, 0.28);
+  --ui-bg-soft: rgba(255, 255, 255, 0.2);
+  --ui-bg-muted: rgba(236, 224, 255, 0.34);
+  --ui-bg-overlay: rgba(255, 255, 255, 0.5);
+  --ui-bg-overlay-strong: rgba(255, 255, 255, 0.72);
+  --ui-text-primary: var(--crystal-ink);
+  --ui-text-secondary: var(--crystal-ink-soft);
+  --ui-text-muted: var(--crystal-muted);
+  --ui-text-on-accent: var(--crystal-on-accent);
+  --ui-border: var(--crystal-line);
+  --ui-border-strong: var(--crystal-line-strong);
+  --ui-accent: var(--crystal-accent);
+  --ui-accent-hover: var(--crystal-accent-deep);
+  --ui-accent-soft: rgba(106, 70, 174, 0.16);
+  --ui-focus-ring: rgba(106, 70, 174, 0.38);
+  --ui-price-primary: #1b122b;
+  --ui-price-promotion: #9f1239;
+  --ui-price-original: var(--crystal-muted);
+  --ui-success: #0f7a56;
+  --ui-success-soft: rgba(15, 122, 86, 0.14);
+  --ui-warning: #8a5a00;
+  --ui-warning-soft: rgba(138, 90, 0, 0.14);
+  --ui-danger: #b42318;
+  --ui-danger-soft: rgba(180, 35, 24, 0.14);
+  --ui-info: #5b3d92;
+  --ui-info-soft: rgba(91, 61, 146, 0.14);
+  --ui-accent-warm: #8a5a00;
+  --ui-accent-warm-hover: #6f4700;
+  --ui-accent-warm-soft: rgba(138, 90, 0, 0.14);
+  --ui-shadow-1: var(--crystal-shadow);
+  --ui-shadow-2: var(--crystal-shadow);
+  --ui-shadow-3: var(--crystal-shadow);
+  color-scheme: light;
+}
+
+html.dark[data-skin="crystal"] {
+  --crystal-ink: #f7f2ff;
+  --crystal-ink-soft: #e3d9f6;
+  --crystal-muted: #cbbfe4;
+  --crystal-accent: #d8c8ff;
+  --crystal-accent-deep: #efe7ff;
+  --crystal-on-accent: #241833;
+  --crystal-line: rgba(255, 255, 255, 0.24);
+  --crystal-line-strong: rgba(216, 200, 255, 0.5);
+  --crystal-fill: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0) 48%), linear-gradient(180deg, #efe6ff 0%, #cbb6ff 100%);
+  --crystal-fill-ink: #241833;
+  --crystal-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.28),
+    0 16px 32px -16px rgba(0, 0, 0, 0.62),
+    0 30px 54px -28px rgba(0, 0, 0, 0.7);
+  --ui-bg-elevated: rgba(42, 30, 68, 0.42);
+  --ui-bg-soft: rgba(255, 255, 255, 0.08);
+  --ui-bg-muted: rgba(255, 255, 255, 0.06);
+  --ui-bg-overlay: rgba(28, 20, 48, 0.62);
+  --ui-bg-overlay-strong: rgba(22, 16, 38, 0.78);
+  --ui-text-primary: var(--crystal-ink);
+  --ui-text-secondary: var(--crystal-ink-soft);
+  --ui-text-muted: var(--crystal-muted);
+  --ui-text-on-accent: var(--crystal-on-accent);
+  --ui-border: var(--crystal-line);
+  --ui-border-strong: var(--crystal-line-strong);
+  --ui-accent: #cbb6ff;
+  --ui-accent-hover: #efe7ff;
+  --ui-accent-soft: rgba(203, 182, 255, 0.2);
+  --ui-focus-ring: rgba(216, 200, 255, 0.46);
+  --ui-price-primary: #f7f2ff;
+  --ui-price-promotion: #ffb4c4;
+  --ui-price-original: #cbbfe4;
+  --ui-success: #7ddeb8;
+  --ui-warning: #ffd27a;
+  --ui-danger: #ffb4ab;
+  --ui-info: #d8c8ff;
+  --ui-accent-warm: #ffd27a;
+  --ui-accent-warm-hover: #ffe3ad;
+  --ui-accent-warm-soft: rgba(255, 210, 122, 0.18);
+  color-scheme: dark;
+}
+
+html[data-skin="crystal"] .vault-scope,
+html[data-skin="crystal"] body.vault-tokens {
+  --bg: transparent;
+  --surface: rgba(255, 255, 255, 0.28);
+  --surface-2: rgba(255, 255, 255, 0.16);
+  --ink: var(--crystal-ink);
+  --ink-2: var(--crystal-ink-soft);
+  --ink-3: var(--crystal-muted);
+  --border: var(--crystal-line);
+  --border-strong: var(--crystal-line-strong);
+  --red: var(--crystal-accent);
+  --red-strong: var(--crystal-accent-deep);
+  --red-soft: rgba(106, 70, 174, 0.16);
+  --on-red: var(--crystal-on-accent);
+  --ui-bg-page: transparent;
+  --ui-bg-elevated: rgba(255, 255, 255, 0.28);
+  --ui-bg-soft: rgba(255, 255, 255, 0.2);
+  --ui-bg-muted: rgba(236, 224, 255, 0.34);
+  --ui-text-primary: var(--crystal-ink);
+  --ui-text-secondary: var(--crystal-ink-soft);
+  --ui-text-muted: var(--crystal-muted);
+  --ui-text-on-accent: var(--crystal-on-accent);
+  --ui-border: var(--crystal-line);
+  --ui-border-strong: var(--crystal-line-strong);
+  --ui-accent: var(--crystal-accent);
+  --ui-accent-hover: var(--crystal-accent-deep);
+  --ui-accent-soft: rgba(106, 70, 174, 0.16);
+  --ui-price-primary: #1b122b;
+  --ui-price-promotion: #9f1239;
+  --ui-price-original: var(--crystal-muted);
+  background: transparent;
+  color: var(--crystal-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;
+}
+
+html.dark[data-skin="crystal"] .vault-scope,
+html.dark[data-skin="crystal"] body.vault-tokens {
+  --surface: rgba(42, 30, 68, 0.42);
+  --surface-2: rgba(255, 255, 255, 0.08);
+  --ui-bg-soft: rgba(255, 255, 255, 0.08);
+  --ui-bg-muted: rgba(255, 255, 255, 0.06);
+  --ui-price-primary: #f7f2ff;
+  --ui-price-promotion: #ffb4c4;
+  --ui-price-original: #cbbfe4;
+  --red-soft: rgba(203, 182, 255, 0.2);
+}
+
+html[data-skin="crystal"],
+html[data-skin="crystal"] body {
+  background-color: #efe6ff;
+  color: var(--crystal-ink);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Noto Sans SC", "Segoe UI", sans-serif;
+  background-image:
+    radial-gradient(420px 340px at 22% 28%, rgba(164, 98, 255, 0.96), transparent 62%),
+    radial-gradient(380px 300px at 46% 24%, rgba(255, 148, 206, 0.88), transparent 64%),
+    radial-gradient(360px 280px at 72% 30%, rgba(126, 196, 255, 0.86), transparent 64%),
+    radial-gradient(300px 240px at 34% 62%, rgba(214, 170, 255, 0.72), transparent 68%),
+    radial-gradient(140px 100px at 40% 34%, rgba(255, 255, 255, 0.92), transparent 70%),
+    linear-gradient(165deg, #f7f3ff 0%, #efe3ff 46%, #f6f1ff 100%);
+  background-attachment: fixed;
+}
+
+html.dark[data-skin="crystal"],
+html.dark[data-skin="crystal"] body {
+  background-color: #140f1e;
+  color: var(--crystal-ink);
+  background-image:
+    radial-gradient(620px 460px at 12% 18%, rgba(132, 86, 214, 0.55), transparent 64%),
+    radial-gradient(480px 380px at 86% 8%, rgba(92, 54, 150, 0.46), transparent 62%),
+    radial-gradient(420px 320px at 60% 86%, rgba(64, 36, 120, 0.5), transparent 66%),
+    linear-gradient(180deg, #1b1428 0%, #100c18 100%);
+}
+
+html[data-skin="crystal"] :is(.bg-background, .min-h-screen.bg-background, #app) {
+  background-color: transparent;
+  background-image: none;
+}
+
+/* 玻璃板：上面透、下面略厚，字和价格落在较稳的霜上 */
+html[data-skin="crystal"] :is(
+  .pcard,
+  .prow,
+  .theme-float,
+  .buy-panel,
+  .rounded-xl.bg-card,
+  .rounded-2xl.bg-card,
+  .rounded-3xl.bg-card,
+  .rounded-\[22px\].bg-card,
+  .rounded-\[28px\].bg-card,
+  .store-product-grid > a
+) {
+  position: relative;
+  background-color: rgba(255, 255, 255, 0.16) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.04) 46%, rgba(255, 255, 255, 0.28) 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.66);
+  box-shadow: var(--crystal-shadow);
+  backdrop-filter: var(--crystal-blur);
+  -webkit-backdrop-filter: var(--crystal-blur);
+  color: var(--crystal-ink);
+  transform: var(--crystal-pose);
+  transition:
+    transform 460ms cubic-bezier(0.18, 1.4, 0.32, 1),
+    box-shadow 460ms ease,
+    filter 460ms ease,
+    --crystal-rx 160ms linear,
+    --crystal-ry 160ms linear,
+    --crystal-lift 460ms cubic-bezier(0.18, 1.4, 0.32, 1),
+    --crystal-scale 460ms cubic-bezier(0.18, 1.4, 0.32, 1);
+}
+
+html.dark[data-skin="crystal"] :is(
+  .pcard,
+  .prow,
+  .theme-float,
+  .buy-panel,
+  .rounded-xl.bg-card,
+  .rounded-2xl.bg-card,
+  .rounded-3xl.bg-card,
+  .rounded-\[22px\].bg-card,
+  .rounded-\[28px\].bg-card,
+  .store-product-grid > a
+) {
+  background-color: rgba(36, 24, 58, 0.34) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.03) 46%, rgba(255, 255, 255, 0.08)) !important;
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--crystal-ink);
+}
+
+/* 折射亮边。中心镂空，不盖住标题和价格 */
+html[data-skin="crystal"] :is(.pcard, .prow, .buy-panel, .theme-float, .store-product-grid > a)::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.96) 0%, rgba(198, 166, 255, 0.55) 24%, rgba(255, 255, 255, 0.08) 50%, rgba(255, 176, 214, 0.5) 76%, rgba(255, 255, 255, 0.82) 100%);
+  pointer-events: none;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+html[data-skin="crystal"] :is(.pcard, .store-product-grid > a)::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: 8px;
+  z-index: 2;
+  height: 34%;
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0) 72%),
+    radial-gradient(90px 48px at var(--crystal-gx, 24%) var(--crystal-gy, 0%), rgba(255, 255, 255, 0.85), transparent 72%);
+  pointer-events: none;
+}
+
+/* 封面改成透色玻璃，让页面的紫和粉从卡片里透出来 */
+html[data-skin="crystal"] .pcard > .relative,
+html[data-skin="crystal"] .product-detail-page .product-stage {
+  background-color: hsl(var(--h, 272) 62% 74% / 0.22) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0.02)) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), inset 0 0 0 1px rgba(255, 255, 255, 0.32);
+}
+
+html.dark[data-skin="crystal"] .pcard > .relative,
+html.dark[data-skin="crystal"] .product-detail-page .product-stage {
+  background-color: hsl(var(--h, 272) 36% 28% / 0.45) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02)) !important;
+}
+
+html[data-skin="crystal"] :is(nav.fixed, footer) {
+  background-color: rgba(255, 255, 255, 0.5) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.12)) !important;
+  border-color: rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 12px 30px -22px rgba(80, 48, 140, 0.45);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  color: var(--crystal-ink);
+}
+
+html.dark[data-skin="crystal"] :is(nav.fixed, footer) {
+  background-color: rgba(18, 12, 32, 0.5) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03)) !important;
+  border-color: rgba(255, 255, 255, 0.14);
+  color: var(--crystal-ink);
+}
+
+html[data-skin="crystal"] :is([role="dialog"], [role="alertdialog"]) {
+  background-color: rgba(255, 255, 255, 0.42) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(244, 236, 255, 0.24)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: var(--crystal-shadow);
+  backdrop-filter: blur(26px) saturate(170%);
+  -webkit-backdrop-filter: blur(26px) saturate(170%);
+  color: var(--crystal-ink);
+}
+
+html.dark[data-skin="crystal"] :is([role="dialog"], [role="alertdialog"]) {
+  background-color: rgba(32, 22, 52, 0.72) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04)) !important;
+}
+
+html[data-skin="crystal"] :is(.pcard, .prow, .store-product-grid, .buy-panel) :is(h1, h2, h3) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+html[data-skin="crystal"] :is(.pcard b, .prow b, .theme-price-lg, .theme-price-sm) {
+  color: var(--ui-price-primary);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+html.dark[data-skin="crystal"] :is(.pcard b, .prow b, .theme-price-lg, .theme-price-sm) {
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+@media (max-width: 767px) {
+  html[data-skin="crystal"] .store-product-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+  }
+
+  html[data-skin="crystal"] .pcard.col-span-2 {
+    grid-column: auto;
+    flex-direction: column;
+  }
+
+  html[data-skin="crystal"] .pcard.col-span-2 > .relative {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  html[data-skin="crystal"] :is(.pcard, .prow, .store-product-grid > a):hover {
+    --crystal-lift: -6px;
+    transform: var(--crystal-pose);
+  }
+
+  html[data-skin="crystal"] .pcard:hover .pcard-cart:not(:disabled) {
+    background-color: #6a46ae !important;
+    background-image: var(--crystal-fill) !important;
+    color: #ffffff;
+  }
+}
+
+html[data-skin="crystal"] :is(button, [data-slot="button"], .theme-pill-link, .theme-wordmark):not([data-slot="switch"]):not([data-slot="checkbox"]):not([class*="group/dot"]) {
+  border-radius: 999px;
+}
+
+html[data-skin="crystal"] button.rounded-2xl {
+  border-radius: 18px;
+}
+
+html[data-skin="crystal"] :is(button, [data-slot="button"]):not([data-slot="switch"]):not([data-slot="checkbox"]):not(.absolute):not(.h-auto):not([class*="group/dot"]) {
+  min-height: 44px;
+}
+
+html[data-skin="crystal"] [data-slot="button"].w-full.justify-start {
+  border-radius: 18px;
+  justify-content: flex-start;
+}
+
+html[data-skin="crystal"] :is(button, [data-slot="button"], .theme-pill-link, .theme-wordmark):not([data-slot="switch"]):not([data-slot="checkbox"]):not(.absolute) {
+  position: relative;
+  overflow: hidden;
+  transform: translate3d(0, var(--crystal-lift, 0px), 0) scale(var(--crystal-scale, 1));
+  transition:
+    transform 460ms cubic-bezier(0.18, 1.4, 0.32, 1),
+    box-shadow 460ms ease,
+    filter 280ms ease,
+    background-color 180ms ease,
+    --crystal-lift 460ms cubic-bezier(0.18, 1.4, 0.32, 1),
+    --crystal-scale 460ms cubic-bezier(0.18, 1.4, 0.32, 1);
+}
+
+html[data-skin="crystal"] :is(
+  button.bg-foreground,
+  [data-slot="button"].bg-foreground,
+  [data-slot="button"].bg-primary,
+  button.bg-primary,
+  button.bg-neutral-50,
+  .prow-buy:not(:disabled)
+) {
+  background-color: #6a46ae !important;
+  background-image: var(--crystal-fill) !important;
+  color: var(--crystal-fill-ink);
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.82),
+    inset 0 -2px 0 rgba(64, 32, 112, 0.28),
+    0 1px 1px rgba(255, 255, 255, 0.4),
+    0 12px 22px -12px rgba(72, 38, 130, 0.75) !important;
+  min-height: 44px;
+}
+
+html[data-skin="crystal"] :is(
+  button.bg-secondary,
+  [data-slot="button"].bg-secondary,
+  button.bg-card,
+  .theme-pill-link,
+  .pcard-cart,
+  .theme-wordmark
+) {
+  background-color: rgba(255, 255, 255, 0.22) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.08)) !important;
+  color: var(--crystal-ink);
+  border: 1px solid rgba(255, 255, 255, 0.68);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.86),
+    inset 0 -1px 0 rgba(120, 80, 180, 0.12),
+    0 10px 18px -14px rgba(80, 48, 140, 0.5) !important;
+  backdrop-filter: blur(16px) saturate(170%);
+  -webkit-backdrop-filter: blur(16px) saturate(170%);
+}
+
+html.dark[data-skin="crystal"] :is(
+  button.bg-secondary,
+  [data-slot="button"].bg-secondary,
+  button.bg-card,
+  .theme-pill-link,
+  .pcard-cart,
+  .theme-wordmark
+) {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.04)) !important;
+  color: var(--crystal-ink);
+}
+
+html[data-skin="crystal"] :is(.pcard-cart, .prow-buy, .theme-pill-link, .catalog-search) {
+  min-height: 44px;
+}
+
+html[data-skin="crystal"] .prow-buy.max-md\:w-9 {
+  min-width: 44px;
+  width: 44px;
+  height: 44px;
+}
+
+html[data-skin="crystal"] .pcard-cart,
+html[data-skin="crystal"] .pcard-cart:is(:hover, :focus, :focus-visible, :active) {
+  box-sizing: border-box;
+  min-width: 44px;
+  width: 44px;
+  max-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  max-height: 44px;
+  padding: 0;
+}
+
+@media (min-width: 768px) {
+  html[data-skin="crystal"] .prow-buy {
+    width: auto;
+    min-width: 44px;
+    padding-inline: 0.9rem;
+  }
+}
+
+html[data-skin="crystal"] [data-slot="button"]:is(.w-9, .size-8, .h-9.w-9) {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+html[data-skin="crystal"] .rounded-full:has(> input[inputmode="numeric"]) {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.08)) !important;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 8px 16px -12px rgba(80, 48, 140, 0.4);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+}
+
+html[data-skin="crystal"] .rounded-full:has(> input[inputmode="numeric"]) > button {
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: 0;
+}
+
+/* 按下：凹陷、变暗的内影。松手后用弹性曲线回到原位 */
+html[data-skin="crystal"] :is(.pcard, .prow, .store-product-grid > a, button, [data-slot="button"], .theme-pill-link):is(.crystal-pressed, :active):not(:disabled):not([aria-disabled="true"]) {
+  --crystal-scale: 0.9;
+  --crystal-lift: 5px;
+  --crystal-rx: 0deg;
+  --crystal-ry: 0deg;
+  transform: perspective(980px) rotateX(0deg) rotateY(0deg) translate3d(0, 5px, 0) scale(0.9);
+  transition-duration: 90ms;
+  transition-timing-function: ease-out;
+  filter: brightness(1.08) saturate(1.12);
+  outline: 6px solid rgba(188, 156, 255, 0.38);
+  outline-offset: 0;
+  box-shadow:
+    inset 0 14px 22px rgba(80, 44, 140, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),
+    0 3px 8px rgba(70, 40, 120, 0.18) !important;
+}
+
+html[data-skin="crystal"] .pcard:active:has(button:active),
+html[data-skin="crystal"] .prow:active:has(button:active) {
+  --crystal-lift: 0px;
+  --crystal-scale: 1;
+  transform: var(--crystal-pose);
+  filter: none;
+  box-shadow: var(--crystal-shadow) !important;
+}
+
+html[data-skin="crystal"] .crystal-ripple {
+  animation: crystal-bloom 520ms ease-out;
+}
+
+html[data-skin="crystal"] .crystal-ripple::after {
+  animation: crystal-glint 520ms ease-out;
+}
+
+html[data-skin="crystal"] :focus-visible {
+  outline: 2px solid var(--crystal-accent);
+  outline-offset: 3px;
+}
+
+html[data-skin="crystal"] :is(button, [data-slot="button"], a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--crystal-accent);
+  outline-offset: 3px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 0 0 4px var(--ui-focus-ring) !important;
+}
+
+html[data-skin="crystal"] :is(button, [data-slot="button"], .prow-buy, .pcard-cart):disabled,
+html[data-skin="crystal"] [aria-disabled="true"] {
+  opacity: 0.48;
+  filter: saturate(0.65);
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+html[data-skin="crystal"] form :is(button, [data-slot="button"]):is(.bg-foreground, .bg-primary):disabled {
+  position: relative;
+  overflow: hidden;
+  opacity: 0.78;
+  filter: none;
+}
+
+html[data-skin="crystal"] form :is(button, [data-slot="button"]):is(.bg-foreground, .bg-primary):disabled::after,
+html[data-skin="crystal"] :is(button, [data-slot="button"])[aria-busy="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  height: auto;
+  background: linear-gradient(100deg, transparent 18%, rgba(255, 255, 255, 0.55) 50%, transparent 82%);
+  animation: crystal-sheen 1.15s ease-in-out infinite;
+  pointer-events: none;
+}
+
+html[data-skin="crystal"] :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="range"]),
+  textarea,
+  select,
+  [role="combobox"]
+) {
+  min-height: 44px;
+  color: var(--crystal-ink);
+  background-color: rgba(255, 255, 255, 0.28);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.48), rgba(255, 255, 255, 0.12));
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 8px 16px -14px rgba(80, 48, 140, 0.35);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+}
+
+html.dark[data-skin="crystal"] :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([type="range"]),
+  textarea,
+  select,
+  [role="combobox"]
+) {
+  background-color: rgba(255, 255, 255, 0.08);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+  color: var(--crystal-ink);
+}
+
+html[data-skin="crystal"] .rounded-full input[inputmode="numeric"] {
+  min-height: 0;
+  height: 2.25rem;
+  background: transparent;
+  background-image: none;
+  border: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-radius: 0;
+}
+
+html[data-skin="crystal"] textarea {
+  border-radius: 18px;
+  min-height: 96px;
+}
+
+html[data-skin="crystal"] input::placeholder,
+html[data-skin="crystal"] textarea::placeholder {
+  color: var(--crystal-muted);
+}
+
+html[data-skin="crystal"] body:not(.vault-tokens) :is([data-slot="checkbox"], [data-slot="switch"]) {
+  --ui-accent: var(--crystal-accent);
+  --ui-text-on-accent: var(--crystal-on-accent);
+}
+
+html[data-skin="crystal"] :is([data-slot="checkbox"], [data-slot="switch"]) {
+  border-radius: 6px;
+  min-height: 0;
+  backdrop-filter: none;
+  transform: none;
+}
+
+html[data-skin="crystal"] [data-slot="switch"] {
+  border-radius: 999px;
+}
+
+html[data-skin="crystal"] [data-slot="button"].bg-destructive,
+html[data-skin="crystal"] button.bg-destructive {
+  background-color: #b42318 !important;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent 46%), linear-gradient(180deg, #e07068, #b42318) !important;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  min-height: 44px;
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  html[data-skin="crystal"] :is(.pcard, .prow, .theme-float, .buy-panel, .rounded-2xl.bg-card, .rounded-\[22px\].bg-card, .rounded-\[28px\].bg-card, .store-product-grid > a, nav.fixed, footer, [role="dialog"], [role="alertdialog"]) {
+    background-color: rgba(246, 240, 255, 0.96) !important;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  html.dark[data-skin="crystal"] :is(.pcard, .prow, .theme-float, .buy-panel, .rounded-2xl.bg-card, .rounded-\[22px\].bg-card, .rounded-\[28px\].bg-card, .store-product-grid > a, nav.fixed, footer, [role="dialog"], [role="alertdialog"]) {
+    background-color: rgba(32, 24, 50, 0.96) !important;
+  }
+
+  html[data-skin="crystal"] :is(
+    input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]):not([type="file"]):not([inputmode="numeric"]),
+    textarea,
+    select,
+    button.bg-secondary,
+    [data-slot="button"].bg-secondary,
+    .theme-pill-link,
+    .pcard-cart
+  ) {
+    background-color: rgba(255, 255, 255, 0.96) !important;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-skin="crystal"] :is(.pcard, .prow, .buy-panel, .store-product-grid > a, button, [data-slot="button"], .theme-pill-link, .crystal-pressed, .crystal-ripple) {
+    transform: none !important;
+    animation: none !important;
+    transition: none !important;
+    --crystal-lift: 0px;
+    --crystal-scale: 1;
+    --crystal-rx: 0deg;
+    --crystal-ry: 0deg;
+  }
+}
+
+@keyframes crystal-sheen {
+  from { transform: translateX(-70%); }
+  to { transform: translateX(70%); }
+}
+
+@keyframes crystal-bloom {
+  0% { outline: 7px solid rgba(188, 156, 255, 0.55); outline-offset: 0; }
+  100% { outline: 2px solid rgba(188, 156, 255, 0); outline-offset: 12px; }
+}
+
+@keyframes crystal-glint {
+  0% { opacity: 0.25; transform: translateX(-18%); }
+  40% { opacity: 1; }
+  100% { opacity: 0.4; transform: translateX(16%); }
+}
+
+/* 有店铺壁纸时，照片铺满视口，上面只留一层浅色遮罩，玻璃仍能透出背景。没有壁纸时不改原主题。 */
+html[data-wallpaper="1"],
+html[data-wallpaper="1"] body {
+  background-color: #cbb6ea !important;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(226, 210, 255, 0.2)),
+    var(--store-wallpaper) !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-attachment: fixed !important;
+  background-repeat: no-repeat !important;
+}
+
+html.dark[data-wallpaper="1"],
+html.dark[data-wallpaper="1"] body {
+  background-color: #140f1c !important;
+  background-image:
+    linear-gradient(180deg, rgba(14, 9, 24, 0.48), rgba(24, 14, 40, 0.3)),
+    var(--store-wallpaper) !important;
+}
+
+html[data-wallpaper="1"] :is(#app, .vault-scope) {
+  background-color: transparent !important;
+  background-image: none !important;
+}

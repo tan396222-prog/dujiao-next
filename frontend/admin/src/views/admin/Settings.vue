@@ -34,6 +34,7 @@ const homeAnnouncementTabRef = ref<InstanceType<typeof SettingsHomeAnnouncementT
 const upstreamSyncTabRef = ref<InstanceType<typeof SettingsUpstreamSyncTab>>()
 const siteIconPickerRef = ref<InstanceType<typeof MediaPicker> | null>(null)
 const siteLogoPickerRef = ref<InstanceType<typeof MediaPicker> | null>(null)
+const siteWallpaperPickerRef = ref<InstanceType<typeof MediaPicker> | null>(null)
 const supportedLanguages = ['zh-CN', 'zh-TW', 'en-US'] as const
 type SupportedLanguage = (typeof supportedLanguages)[number]
 type SiteScriptPosition = 'head' | 'body_end'
@@ -186,6 +187,7 @@ const form = reactive({
     // site_icon 是浏览器 favicon；site_logo 是前台页面 Logo，二者必须独立保存和清除。
     site_icon: '',
     site_logo: '',
+    wallpaper: '',
     site_description: createLocalizedField(),
   },
   currency: 'CNY',
@@ -393,6 +395,7 @@ const fetchSettings = async () => {
         form.brand.site_url = String(brand.site_url || '')
         form.brand.site_icon = String(brand.site_icon || '')
         form.brand.site_logo = String(brand.site_logo || '')
+        form.brand.wallpaper = String(brand.wallpaper || '')
         form.brand.site_description = normalizeLocalizedField(brand.site_description)
       }
       {
@@ -636,12 +639,20 @@ const openSiteLogoPicker = () => {
   siteLogoPickerRef.value?.openPicker()
 }
 
+const openSiteWallpaperPicker = () => {
+  siteWallpaperPickerRef.value?.openPicker()
+}
+
 const clearSiteIcon = () => {
   form.brand.site_icon = ''
 }
 
 const clearSiteLogo = () => {
   form.brand.site_logo = ''
+}
+
+const clearSiteWallpaper = () => {
+  form.brand.wallpaper = ''
 }
 
 const saveOrderSettings = async () => {
@@ -997,6 +1008,35 @@ onMounted(() => {
             </div>
             <p class="text-xs text-muted-foreground">{{ t('admin.settings.brand.siteLogoTip') }}</p>
             <MediaPicker ref="siteLogoPickerRef" v-model="form.brand.site_logo" scene="common" dialog-only />
+          </div>
+          <div class="space-y-2 md:col-span-2">
+            <label class="text-xs font-medium text-muted-foreground">{{ t('admin.settings.brand.siteWallpaper') }}</label>
+            <div class="flex items-center gap-3">
+              <button
+                type="button"
+                class="flex h-16 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted/20 transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                :title="t('admin.settings.brand.siteWallpaperTip')"
+                @click="openSiteWallpaperPicker"
+              >
+                <img v-if="form.brand.wallpaper" :src="getImageUrl(form.brand.wallpaper)" class="h-full w-full object-cover" alt="" />
+                <span v-else class="px-2 text-center text-[10px] font-semibold text-muted-foreground">{{ t('admin.settings.brand.siteWallpaper') }}</span>
+              </button>
+              <Button type="button" variant="outline" size="sm" @click="openSiteWallpaperPicker">
+                {{ t('admin.settings.brand.siteWallpaperSelect') }}
+              </Button>
+              <Button v-if="form.brand.wallpaper" type="button" variant="ghost" size="sm" @click="clearSiteWallpaper">
+                {{ t('admin.settings.brand.siteWallpaperRemove') }}
+              </Button>
+            </div>
+            <p class="text-xs text-muted-foreground">{{ t('admin.settings.brand.siteWallpaperTip') }}</p>
+            <MediaPicker
+              ref="siteWallpaperPickerRef"
+              v-model="form.brand.wallpaper"
+              scene="common"
+              dialog-only
+              :max-bytes="8 * 1024 * 1024"
+              :allowed-extensions="['.jpg', '.jpeg', '.png', '.webp']"
+            />
           </div>
           <div class="space-y-2 md:col-span-2">
             <div class="flex items-center justify-between">

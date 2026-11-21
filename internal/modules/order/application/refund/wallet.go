@@ -138,6 +138,7 @@ func (s *Service) AdminRefundToWallet(
 		if s.affiliateRefund != nil {
 			if err := s.affiliateRefund.HandleOrderRefunded(
 				tx.Affiliates(),
+				tx.Wallets().Wallets(),
 				&order,
 				amount,
 				refundedBefore,

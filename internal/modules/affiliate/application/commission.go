@@ -1,6 +1,7 @@
 package application
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -11,6 +12,8 @@ import (
 
 	affiliatecontract "github.com/dujiao-next/internal/modules/affiliate/contract"
 	affiliatedomain "github.com/dujiao-next/internal/modules/affiliate/domain"
+	walletapp "github.com/dujiao-next/internal/modules/wallet/application"
+	walletcontract "github.com/dujiao-next/internal/modules/wallet/contract"
 
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/shared/money"
@@ -36,7 +39,7 @@ func (s *Service) HandleOrderPaid(orderID uint) error {
 		return err
 	}
 	// 重试任务可能晚于退款/取消执行，此时退款流程已找不到佣金可冲销，不能再生成
-	if order == nil || order.Status == constants.OrderStatusRefunded || order.Status == constants.OrderStatusCanceled {
+	if order == nil || !commissionableOrderStatus(order.Status) {
 		return nil
 	}
 	profile, err := s.resolveAffiliateProfileForOrder(order)
@@ -59,7 +62,7 @@ func (s *Service) HandleOrderPaid(orderID uint) error {
 		return err
 	}
 	if existing != nil {
-		return nil
+		return s.creditCommissionToWallet(existing, order)
 	}
 
 	baseAmount, err := s.calculateCommissionBaseAmount(order)
@@ -82,12 +85,15 @@ func (s *Service) HandleOrderPaid(orderID uint) error {
 	status := constants.AffiliateCommissionStatusPendingConfirm
 	var confirmAt *time.Time
 	var availableAt *time.Time
-	if setting.ConfirmDays <= 0 {
+	walletReady := s.wallet != nil && s.walletTx != nil
+	if setting.ConfirmDays <= 0 && !walletReady {
 		status = constants.AffiliateCommissionStatusAvailable
 		availableAt = &paidAt
+	} else if setting.ConfirmDays <= 0 {
+		confirmAt = &paidAt
 	} else {
-		t := paidAt.Add(time.Duration(setting.ConfirmDays) * 24 * time.Hour)
-		confirmAt = &t
+		due := paidAt.Add(time.Duration(setting.ConfirmDays) * 24 * time.Hour)
+		confirmAt = &due
 	}
 
 	commission := &affiliatedomain.Commission{
@@ -101,16 +107,65 @@ func (s *Service) HandleOrderPaid(orderID uint) error {
 		ConfirmAt:          confirmAt,
 		AvailableAt:        availableAt,
 	}
-	return s.repo.CreateCommission(commission)
+	if err := s.repo.CreateCommission(commission); err != nil {
+		return err
+	}
+	return s.creditCommissionToWallet(commission, order)
 }
 
-// ConfirmDueCommissions 将到期佣金转可提现
+// ConfirmDueCommissions 将到期佣金转入可购物余额；未接入钱包时仍转为可提现。
 func (s *Service) ConfirmDueCommissions(now time.Time) error {
 	if s.repo == nil {
 		return nil
 	}
-	_, err := s.repo.MarkPendingCommissionsAvailable(now, now)
-	return err
+	if s.wallet == nil || s.walletTx == nil {
+		_, err := s.repo.MarkPendingCommissionsAvailable(now, now)
+		return err
+	}
+	page := 1
+	const pageSize = 100
+	for {
+		rows, _, err := s.repo.ListCommissions(affiliatecontract.CommissionListFilter{
+			Page:     page,
+			PageSize: pageSize,
+			Status:   constants.AffiliateCommissionStatusPendingConfirm,
+		})
+		if err != nil {
+			return err
+		}
+		if len(rows) == 0 {
+			return nil
+		}
+		progressed := false
+		for i := range rows {
+			item := rows[i]
+			if item.ConfirmAt == nil || item.ConfirmAt.After(now) {
+				continue
+			}
+			var order *orderdomain.Order
+			if s.orderRepo != nil {
+				order, err = s.orderRepo.GetByID(item.OrderID)
+				if err != nil {
+					return err
+				}
+			}
+			before := item.Status
+			if err := s.creditCommissionToWallet(&item, order); err != nil {
+				return err
+			}
+			if item.Status != before {
+				progressed = true
+			}
+		}
+		if !progressed {
+			if len(rows) < pageSize {
+				return nil
+			}
+			page++
+			continue
+		}
+		page = 1
+	}
 }
 
 // HandleOrderCanceled 处理订单取消/退款后的佣金逆向
@@ -121,6 +176,7 @@ func (s *Service) HandleOrderCanceled(orderID uint, reason string) error {
 	rows, err := s.repo.ListCommissionsByOrder(orderID, []string{
 		constants.AffiliateCommissionStatusPendingConfirm,
 		constants.AffiliateCommissionStatusAvailable,
+		constants.AffiliateCommissionStatusWalletCredited,
 	})
 	if err != nil {
 		return err
@@ -140,6 +196,11 @@ func (s *Service) HandleOrderCanceled(orderID uint, reason string) error {
 			// 已进入提现流程，按业务规则不影响用户提现。
 			continue
 		}
+		if item.Status == constants.AffiliateCommissionStatusWalletCredited {
+			if err := s.debitWalletCommission(&item, item.CommissionAmount.Decimal, fmt.Sprintf("affiliate-commission-cancel:%d", item.ID), "订单取消冲回推广佣金"); err != nil {
+				return err
+			}
+		}
 		item.Status = constants.AffiliateCommissionStatusRejected
 		item.InvalidReason = reasonText
 		item.UpdatedAt = now
@@ -153,6 +214,7 @@ func (s *Service) HandleOrderCanceled(orderID uint, reason string) error {
 // HandleOrderRefunded 使用调用方提供的事务 Store 处理退款后的佣金回滚。
 func (s *Service) HandleOrderRefunded(
 	repoTx affiliatecontract.Store,
+	wallets walletcontract.Repository,
 	order *orderdomain.Order,
 	refundDelta decimal.Decimal,
 	refundedBefore decimal.Decimal,
@@ -187,6 +249,7 @@ func (s *Service) HandleOrderRefunded(
 	rows, err := repoTx.ListCommissionsByOrderForUpdate(order.ID, []string{
 		constants.AffiliateCommissionStatusPendingConfirm,
 		constants.AffiliateCommissionStatusAvailable,
+		constants.AffiliateCommissionStatusWalletCredited,
 	})
 	if err != nil {
 		return err
@@ -222,6 +285,25 @@ func (s *Service) HandleOrderRefunded(
 
 		// 按“本次退款金额 / 当前剩余未退款金额”比例扣减当前佣金，避免多次退款时重复放大扣减。
 		deduct := currentCommission.Mul(delta).Div(remaining).Round(2)
+		if item.Status == constants.AffiliateCommissionStatusWalletCredited && wallets != nil && deduct.GreaterThan(decimal.Zero) {
+			profile, profileErr := repoTx.GetProfileByID(item.AffiliateProfileID)
+			if profileErr != nil {
+				return profileErr
+			}
+			if profile != nil && profile.UserID > 0 {
+				if _, debitErr := walletapp.DebitUpTo(wallets, walletcontract.CreditInput{
+					UserID:    profile.UserID,
+					Amount:    money.FromDecimal(deduct),
+					Currency:  order.Currency,
+					Type:      constants.WalletTxnTypeAffiliateCommissionReversal,
+					Reference: fmt.Sprintf("affiliate-commission-reversal:%d:%s:%s", item.ID, before.StringFixed(2), delta.StringFixed(2)),
+					Remark:    "订单退款冲回推广佣金",
+					OrderID:   &order.ID,
+				}); debitErr != nil {
+					return debitErr
+				}
+			}
+		}
 		nextCommission := currentCommission.Sub(deduct).Round(2)
 		if nextCommission.LessThan(decimal.Zero) {
 			nextCommission = decimal.Zero
@@ -266,7 +348,7 @@ func (s *Service) resolveAffiliateProfileForOrder(order *orderdomain.Order) (*af
 }
 
 func (s *Service) calculateCommissionBaseAmount(order *orderdomain.Order) (decimal.Decimal, error) {
-	if order == nil || s.productRepo == nil {
+	if order == nil || s.productRepo == nil || !commissionableOrderStatus(order.Status) {
 		return decimal.Zero, nil
 	}
 	productIDs := collectAffiliateProductIDs(order)
@@ -287,21 +369,151 @@ func (s *Service) calculateCommissionBaseAmount(order *orderdomain.Order) (decim
 		targetOrders = []orderdomain.Order{*order}
 	}
 
-	total := decimal.Zero
+	eligible := decimal.Zero
+	goods := decimal.Zero
 	for _, current := range targetOrders {
 		for _, item := range current.Items {
-			product, ok := productMap[item.ProductID]
-			if !ok || !product.IsAffiliateEnabled {
-				continue
-			}
 			payable := item.TotalPrice.Decimal.Sub(item.CouponDiscount.Decimal).Round(2)
 			if payable.LessThan(decimal.Zero) {
 				payable = decimal.Zero
 			}
-			total = total.Add(payable).Round(2)
+			goods = goods.Add(payable).Round(2)
+			product, ok := productMap[item.ProductID]
+			if !ok || !product.IsAffiliateEnabled {
+				continue
+			}
+			eligible = eligible.Add(payable).Round(2)
 		}
 	}
-	return total, nil
+	if eligible.LessThanOrEqual(decimal.Zero) || goods.LessThanOrEqual(decimal.Zero) {
+		return decimal.Zero, nil
+	}
+	// 实付只取本单余额与在线支付之和，不把子订单里下单时预填的在线金额再加一次。
+	actualPaid := order.WalletPaidAmount.Decimal.Round(2).Add(order.OnlinePaidAmount.Decimal.Round(2)).Round(2)
+	if actualPaid.LessThanOrEqual(decimal.Zero) {
+		return decimal.Zero, nil
+	}
+	if actualPaid.GreaterThan(goods) {
+		actualPaid = goods
+	}
+	base := eligible.Mul(actualPaid).Div(goods).Round(2)
+	refunded := order.RefundedAmount.Decimal.Round(2)
+	totalAmount := order.TotalAmount.Decimal.Round(2)
+	if refunded.GreaterThan(decimal.Zero) && totalAmount.GreaterThan(decimal.Zero) {
+		remaining := totalAmount.Sub(refunded).Round(2)
+		if remaining.LessThanOrEqual(decimal.Zero) {
+			return decimal.Zero, nil
+		}
+		if remaining.LessThan(totalAmount) {
+			base = base.Mul(remaining).Div(totalAmount).Round(2)
+		}
+	}
+	if base.LessThan(decimal.Zero) {
+		return decimal.Zero, nil
+	}
+	return base, nil
+}
+
+func commissionableOrderStatus(status string) bool {
+	switch strings.TrimSpace(status) {
+	case constants.OrderStatusPaid,
+		constants.OrderStatusFulfilling,
+		constants.OrderStatusPartiallyDelivered,
+		constants.OrderStatusDelivered,
+		constants.OrderStatusCompleted,
+		constants.OrderStatusPartiallyRefunded:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Service) creditCommissionToWallet(commission *affiliatedomain.Commission, order *orderdomain.Order) error {
+	if s == nil || commission == nil || commission.ID == 0 || s.repo == nil || s.wallet == nil || s.walletTx == nil {
+		return nil
+	}
+	status := strings.TrimSpace(commission.Status)
+	if status == constants.AffiliateCommissionStatusWalletCredited ||
+		status == constants.AffiliateCommissionStatusRejected ||
+		status == constants.AffiliateCommissionStatusWithdrawn ||
+		commission.WithdrawRequestID != nil {
+		return nil
+	}
+	if commission.ConfirmAt != nil && commission.ConfirmAt.After(time.Now()) {
+		return nil
+	}
+	if status != constants.AffiliateCommissionStatusPendingConfirm && status != constants.AffiliateCommissionStatusAvailable {
+		return nil
+	}
+	amount := commission.CommissionAmount.Decimal.Round(2)
+	if amount.LessThanOrEqual(decimal.Zero) {
+		return nil
+	}
+	profile, err := s.repo.GetProfileByID(commission.AffiliateProfileID)
+	if err != nil {
+		return err
+	}
+	if profile == nil || profile.UserID == 0 {
+		return nil
+	}
+	currency := "CNY"
+	var orderID *uint
+	if order != nil {
+		if trimmed := strings.ToUpper(strings.TrimSpace(order.Currency)); trimmed != "" {
+			currency = trimmed
+		}
+		id := order.ID
+		orderID = &id
+	}
+	reference := fmt.Sprintf("affiliate-commission:%d", commission.ID)
+	if err := s.walletTx.WithinTransaction(func(tx walletcontract.Transaction) error {
+		_, _, creditErr := s.wallet.CreditInTransaction(tx, walletcontract.CreditInput{
+			UserID:    profile.UserID,
+			Amount:    money.FromDecimal(amount),
+			Currency:  currency,
+			Type:      constants.WalletTxnTypeAffiliateCommission,
+			Reference: reference,
+			Remark:    "推广佣金转入可购物余额",
+			OrderID:   orderID,
+		})
+		return creditErr
+	}); err != nil {
+		return err
+	}
+	now := time.Now()
+	commission.Status = constants.AffiliateCommissionStatusWalletCredited
+	commission.AvailableAt = &now
+	commission.UpdatedAt = now
+	return s.repo.UpdateCommission(commission)
+}
+
+func (s *Service) debitWalletCommission(commission *affiliatedomain.Commission, amount decimal.Decimal, reference, remark string) error {
+	if s == nil || commission == nil || s.walletTx == nil || s.repo == nil {
+		return nil
+	}
+	amount = amount.Round(2)
+	if amount.LessThanOrEqual(decimal.Zero) {
+		return nil
+	}
+	profile, err := s.repo.GetProfileByID(commission.AffiliateProfileID)
+	if err != nil {
+		return err
+	}
+	if profile == nil || profile.UserID == 0 {
+		return nil
+	}
+	return s.walletTx.WithinTransaction(func(tx walletcontract.Transaction) error {
+		_, debitErr := walletapp.DebitUpTo(tx.Wallets(), walletcontract.CreditInput{
+			UserID:    profile.UserID,
+			Amount:    money.FromDecimal(amount),
+			Currency:  "CNY",
+			Type:      constants.WalletTxnTypeAffiliateCommissionReversal,
+			Reference: reference,
+			Remark:    remark,
+			OrderID:   &commission.OrderID,
+		})
+		return debitErr
+	})
 }
 
 func collectAffiliateProductIDs(order *orderdomain.Order) []uint {

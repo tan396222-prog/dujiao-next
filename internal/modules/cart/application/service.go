@@ -73,12 +73,6 @@ func (s *Service) ListByUser(userID uint) ([]ItemDetail, error) {
 			_ = s.cartRepo.DeleteByUserProductSKU(userID, item.ProductID, item.SKUID)
 			continue
 		}
-		if strings.TrimSpace(product.FulfillmentType) == constants.FulfillmentTypeManual &&
-			productdomain.ShouldEnforceManualSKUStock(product, sku) &&
-			productdomain.ManualSKUAvailable(sku) <= 0 {
-			_ = s.cartRepo.DeleteByUserProductSKU(userID, item.ProductID, item.SKUID)
-			continue
-		}
 
 		priceCarrier := *product
 		priceCarrier.PriceAmount = sku.PriceAmount
@@ -135,13 +129,11 @@ func (s *Service) UpsertItem(input UpsertItemInput) error {
 	if fulfillmentType == "" {
 		fulfillmentType = constants.FulfillmentTypeManual
 	}
-	if fulfillmentType != constants.FulfillmentTypeManual && fulfillmentType != constants.FulfillmentTypeAuto {
-		return contract.ErrFulfillmentInvalid
+	if product.CouponSale {
+		fulfillmentType = constants.FulfillmentTypeCoupon
 	}
-	if fulfillmentType == constants.FulfillmentTypeManual &&
-		productdomain.ShouldEnforceManualSKUStock(product, sku) &&
-		productdomain.ManualSKUAvailable(sku) < input.Quantity {
-		return contract.ErrManualStockInsufficient
+	if fulfillmentType != constants.FulfillmentTypeManual && fulfillmentType != constants.FulfillmentTypeAuto && fulfillmentType != constants.FulfillmentTypeCoupon {
+		return contract.ErrFulfillmentInvalid
 	}
 
 	now := time.Now()

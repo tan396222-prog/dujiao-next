@@ -2,6 +2,7 @@
   "common": {
     "siteName": "Dujiao-Next",
     "loading": "Loading...",
+    "loadingRetry": "Still loading. Tap to retry",
     "error": "Error",
     "success": "Success",
     "confirm": "Confirm",
@@ -168,6 +169,14 @@
       "lowStockCount": "Low stock ({count} left)",
       "outOfStock": "Sold out"
     },
+    "stockTier": {
+      "low": "Low",
+      "mid": "Medium",
+      "high": "High",
+      "presale": "Low · Presale",
+      "unavailable": "Unavailable"
+    },
+    "presaleNotice": "You can still order when stock is low. Payment starts a presale and nothing is delivered until stock arrives.",
     "fulfillmentType": {
       "manual": "Manual delivery",
       "auto": "Auto fulfillment"
@@ -285,6 +294,7 @@
   "bottomNav": {
     "home": "Home",
     "products": "Products",
+    "invite": "Invite",
     "cart": "Cart",
     "me": "Me"
   },
@@ -571,6 +581,8 @@
         "order_pay": "Order payment",
         "order_refund": "Order refund",
         "gift_card_redeem": "Gift card redeem",
+        "affiliate_commission": "Affiliate commission",
+        "affiliate_commission_reversal": "Affiliate commission reversal",
         "admin_adjust": "Admin adjustment",
         "admin_refund": "Admin refund",
         "order_underpaid_credit": "Underpaid order credit"
@@ -587,7 +599,7 @@
     },
     "affiliate": {
       "title": "Affiliate Center",
-      "subtitle": "Track referrals and commissions, then submit withdraw requests",
+      "subtitle": "Open it to get your invite link. Confirmed commission is added to your shoppable balance.",
       "notOpened": "Affiliate is not enabled for your account yet. Open it to get your unique affiliate ID and promotion URL.",
       "openButton": "Open Affiliate",
       "opening": "Opening...",
@@ -631,7 +643,8 @@
         "pendingConfirm": "Pending Confirm",
         "available": "Available",
         "rejected": "Rejected",
-        "withdrawn": "Withdrawn"
+        "withdrawn": "Withdrawn",
+        "walletCredited": "Added to balance"
       },
       "withdrawStatus": {
         "pendingReview": "Pending Review",
@@ -720,7 +733,7 @@
           "announcement": "Announcement"
         },
         "descriptions": {
-          "brand": "Set the site name, logo, and browser favicon",
+          "brand": "Set the site name, logo, browser favicon, and this store's wallpaper",
           "support": "Contact entries shown on the storefront; leave blank to hide",
           "seo": "Search engine and social sharing info, per language",
           "announcement": "An announcement shown to visitors in a popup on the storefront home page",
@@ -766,6 +779,9 @@
         "upload": "Upload",
         "replace": "Replace",
         "uploadHint": "JPG / PNG / WebP / GIF / SVG, within the site size limit",
+        "wallpaperHint": "Affects only this store. JPG, PNG, or WebP, up to 8 MB, longest side 4096 px. Remove and save to inherit again: the main store wallpaper is used, or the original theme background when the main store has none. This does not change the main store or other agents.",
+        "wallpaperRemove": "Remove wallpaper",
+        "wallpaperInvalid": "Choose a JPG, PNG, or WebP image up to 8 MB",
         "uploadFailed": "Image upload failed, please try again",
         "editor": {
           "placeholder": "Write the announcement, with images, links and formatting…",
@@ -795,6 +811,7 @@
           "siteName": "Site Name",
           "logo": "Logo URL",
           "favicon": "Favicon URL",
+          "wallpaper": "Store wallpaper",
           "telegram": "Telegram",
           "whatsapp": "WhatsApp",
           "email": "Support Email",
@@ -1693,13 +1710,15 @@
     "childFulfillmentTitle": "Child fulfillment",
     "childFulfillmentEmpty": "No fulfillment yet",
     "manualSubmissionTitle": "Submitted information",
+    "presalePending": "Presale order. It ships after restock and is not marked delivered at payment.",
     "fulfillmentTitle": "Fulfillment",
     "fulfillmentType": "Type",
     "fulfillmentStatus": "Status",
     "instructionsTitle": "Usage instructions",
     "fulfillmentTypes": {
       "manual": "Manual",
-      "auto": "Auto"
+      "auto": "Auto",
+      "coupon": "Coupon code"
     },
     "fulfillmentStatuses": {
       "pending": "Pending",

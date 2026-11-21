@@ -9,6 +9,7 @@ import {
   AFFILIATE_COMMISSION_STATUS_PENDING_CONFIRM,
   AFFILIATE_COMMISSION_STATUS_REJECTED,
   AFFILIATE_COMMISSION_STATUS_WITHDRAWN,
+  AFFILIATE_COMMISSION_STATUS_WALLET_CREDITED,
 } from '@/constants/affiliate'
 import IdCell from '@/components/IdCell.vue'
 import { Button } from '@/components/ui/button'
@@ -91,6 +92,7 @@ const statusLabel = (status?: string) => {
   if (status === AFFILIATE_COMMISSION_STATUS_AVAILABLE) return t('admin.affiliatesCommissions.status.available')
   if (status === AFFILIATE_COMMISSION_STATUS_REJECTED) return t('admin.affiliatesCommissions.status.rejected')
   if (status === AFFILIATE_COMMISSION_STATUS_WITHDRAWN) return t('admin.affiliatesCommissions.status.withdrawn')
+  if (status === AFFILIATE_COMMISSION_STATUS_WALLET_CREDITED) return t('admin.affiliatesCommissions.status.walletCredited')
   return status || '-'
 }
 
@@ -99,6 +101,7 @@ const statusClass = (status?: string) => {
   if (status === AFFILIATE_COMMISSION_STATUS_AVAILABLE) return 'border-emerald-200 bg-emerald-50 text-emerald-700'
   if (status === AFFILIATE_COMMISSION_STATUS_REJECTED) return 'border-zinc-200 bg-zinc-50 text-zinc-700'
   if (status === AFFILIATE_COMMISSION_STATUS_WITHDRAWN) return 'border-sky-200 bg-sky-50 text-sky-700'
+  if (status === AFFILIATE_COMMISSION_STATUS_WALLET_CREDITED) return 'border-violet-200 bg-violet-50 text-violet-700'
   return 'border-border bg-muted/30 text-muted-foreground'
 }
 
@@ -136,6 +139,7 @@ onMounted(() => {
               <SelectItem :value="AFFILIATE_COMMISSION_STATUS_AVAILABLE">{{ t('admin.affiliatesCommissions.status.available') }}</SelectItem>
               <SelectItem :value="AFFILIATE_COMMISSION_STATUS_REJECTED">{{ t('admin.affiliatesCommissions.status.rejected') }}</SelectItem>
               <SelectItem :value="AFFILIATE_COMMISSION_STATUS_WITHDRAWN">{{ t('admin.affiliatesCommissions.status.withdrawn') }}</SelectItem>
+              <SelectItem :value="AFFILIATE_COMMISSION_STATUS_WALLET_CREDITED">{{ t('admin.affiliatesCommissions.status.walletCredited') }}</SelectItem>
             </SelectContent>
           </Select>
         </div>

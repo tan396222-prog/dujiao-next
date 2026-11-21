@@ -552,6 +552,9 @@ func reserveAutoSecretsByItems(secretRepo cardsecretcontract.Repository, ownerOr
 		if strings.TrimSpace(item.FulfillmentType) != constants.FulfillmentTypeAuto {
 			continue
 		}
+		if item.IsPresale() || item.IsCouponSale() {
+			continue
+		}
 		if item.ProductID == 0 || item.Quantity <= 0 {
 			continue
 		}
