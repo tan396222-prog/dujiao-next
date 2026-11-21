@@ -2,6 +2,7 @@
   "common": {
     "siteName": "Dujiao-Next",
     "loading": "載入中...",
+    "loadingRetry": "載入沒有完成，點此重試",
     "error": "錯誤",
     "success": "成功",
     "confirm": "確認",

@@ -2,6 +2,7 @@
   "common": {
     "siteName": "Dujiao-Next",
     "loading": "Loading...",
+    "loadingRetry": "Still loading. Tap to retry",
     "error": "Error",
     "success": "Success",
     "confirm": "Confirm",

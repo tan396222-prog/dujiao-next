@@ -5,7 +5,7 @@
       <div v-if="loading" class="space-y-6" aria-hidden="true">
         <div class="h-5 w-48 rounded theme-skeleton"></div>
         <div class="grid gap-5 lg:grid-cols-12 lg:gap-6">
-          <div class="aspect-[4/3] rounded-[28px] theme-skeleton lg:col-span-7"></div>
+          <div class="aspect-square rounded-[28px] theme-skeleton lg:col-span-7"></div>
           <div class="theme-float space-y-5 rounded-[28px] bg-card p-6 md:p-8 lg:col-span-5">
             <div class="h-3 w-24 rounded theme-skeleton"></div>
             <div class="h-8 w-3/4 rounded theme-skeleton"></div>

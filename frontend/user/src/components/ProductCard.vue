@@ -15,10 +15,7 @@
         class="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl md:h-16 md:w-16"
         :class="[hasImage ? 'bg-muted' : 'bg-[hsl(var(--h)_62%_94%)] dark:bg-[hsl(var(--h)_32%_17%)]', soldOut && 'grayscale']"
       >
-        <template v-if="hasImage">
-          <img :src="displayImageSrc" alt="" aria-hidden="true" loading="lazy" decoding="async" class="absolute inset-0 h-full w-full scale-150 object-cover opacity-60 blur-lg saturate-150" />
-          <img :src="displayImageSrc" :alt="title" loading="lazy" decoding="async" class="pcard-tile relative h-9 w-9 rounded-lg object-cover md:h-10 md:w-10" @error="handleImageError" />
-        </template>
+        <img v-if="hasImage" :src="displayImageSrc" :alt="title" loading="lazy" decoding="async" class="pcard-cover absolute inset-0 h-full w-full object-cover" @error="handleImageError" />
         <span v-else aria-hidden="true" class="text-xl font-extrabold text-[hsl(var(--h)_55%_38%)] dark:text-[hsl(var(--h)_55%_76%)]">{{ monogram }}</span>
       </div>
       <div class="min-w-0">
@@ -93,23 +90,20 @@
     <div
       class="relative grid shrink-0 place-items-center overflow-hidden rounded-2xl"
       :class="[
-        lead ? 'max-md:aspect-square max-md:w-[42%] md:min-h-32 md:flex-1' : 'aspect-[16/10]',
-        hasImage ? 'bg-muted' : 'bg-[hsl(var(--h)_62%_94%)] dark:bg-[hsl(var(--h)_32%_17%)]',
+        lead ? 'aspect-square max-md:w-[42%] md:w-full' : 'aspect-square',
+        hasImage ? 'z-[4] bg-muted' : 'bg-[hsl(var(--h)_62%_94%)] dark:bg-[hsl(var(--h)_32%_17%)]',
         soldOut && 'grayscale',
       ]"
     >
-      <template v-if="hasImage">
-        <!-- 同一张图放大模糊，给托盘染上商品自己的色调 -->
-        <img :src="displayImageSrc" alt="" aria-hidden="true" loading="lazy" decoding="async"
-          class="absolute inset-0 h-full w-full scale-150 object-cover opacity-50 blur-2xl saturate-150" />
-        <!-- 绝对定位：不让图片的原始尺寸撑高卡片 -->
-        <div class="absolute inset-0 flex items-center justify-center">
-          <img :src="displayImageSrc" :alt="title" loading="lazy" decoding="async"
-            class="pcard-tile h-[62%] w-auto max-w-[80%] rounded-xl object-cover"
-            :class="lead && 'md:h-[56%] md:rounded-2xl'"
-            @error="handleImageError" />
-        </div>
-      </template>
+      <img
+        v-if="hasImage"
+        :src="displayImageSrc"
+        :alt="title"
+        loading="lazy"
+        decoding="async"
+        class="pcard-cover absolute inset-0 h-full w-full object-cover"
+        @error="handleImageError"
+      />
       <span v-else role="img" :aria-label="title"
         class="font-extrabold tracking-tighter text-[hsl(var(--h)_55%_38%)] dark:text-[hsl(var(--h)_55%_76%)]"
         :class="lead ? 'text-6xl md:text-8xl' : 'text-[44px]'">
@@ -288,8 +282,8 @@ const handleImageError = () => {
   transition: transform 250ms var(--ui-ease-out), box-shadow 250ms;
 }
 
-.pcard-tile {
-  box-shadow: 0 10px 20px -10px rgba(0, 0, 0, 0.4);
+.pcard-cover {
+  object-position: center;
   transition: transform 350ms var(--ui-ease-out);
 }
 
@@ -301,8 +295,8 @@ const handleImageError = () => {
   .dark .pcard:hover {
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 24px 44px -18px rgba(0, 0, 0, 0.8);
   }
-  .pcard:hover .pcard-tile {
-    transform: scale(1.06) rotate(-2deg);
+  .pcard:hover .pcard-cover {
+    transform: scale(1.04);
   }
   .pcard:hover .pcard-cart:not(:disabled) {
     background: var(--ui-text-primary);
@@ -331,12 +325,13 @@ const handleImageError = () => {
   .prow:hover .prow-buy:not(:disabled) {
     transform: scale(1.06);
   }
-  .prow:hover .pcard-tile {
-    transform: scale(1.1) rotate(-3deg);
+  .prow:hover .pcard-cover {
+    transform: scale(1.04);
   }
 }
 
 .pcard-flag {
+  z-index: 5;
   border-radius: 999px;
   padding: 0 0.5rem;
   font-size: 11px;
@@ -346,7 +341,7 @@ const handleImageError = () => {
 
 @media (prefers-reduced-motion: reduce) {
   .pcard,
-  .pcard-tile {
+  .pcard-cover {
     transition: none;
   }
 }

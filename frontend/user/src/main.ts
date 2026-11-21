@@ -40,6 +40,7 @@ Promise.all([
   setI18nLocale(detectLocale()),
 ]).then(() => {
   app.mount('#app')
+  document.getElementById('boot')?.remove()
 })
 
 void router.isReady().then(() => {

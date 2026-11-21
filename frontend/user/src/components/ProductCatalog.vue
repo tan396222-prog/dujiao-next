@@ -80,7 +80,7 @@
             </div>
           </template>
           <div v-for="i in 12" v-else :key="i" class="theme-float rounded-[22px] bg-card p-1.5">
-            <div class="aspect-[16/10] rounded-2xl theme-skeleton"></div>
+            <div class="aspect-square rounded-2xl theme-skeleton"></div>
             <div class="space-y-2 px-2.5 pb-2 pt-3">
               <div class="h-4 w-full rounded theme-skeleton"></div>
               <div class="h-3 w-16 rounded theme-skeleton"></div>

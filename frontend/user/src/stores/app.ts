@@ -1,5 +1,8 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+
+// 首屏配置请求和全屏加载层共用这个上限。超时后关掉遮罩并让路由继续，避免失败时一直转。
+const CONFIG_LOAD_LIMIT_MS = 12000
 import { configAPI } from '../api'
 import { applyCustomScripts } from '../utils/customScripts'
 import { getImageUrl } from '../utils/image'
@@ -69,16 +72,29 @@ export const useAppStore = defineStore('app', () => {
     }
 
     // 加载全局配置
+    let configLoadToken = 0
+    let lastConfigFailureAt = 0
     const loadConfig = async (force = false) => {
         if (config.value && !force) {
             applySEO()
             applyCustomScripts(config.value?.scripts)
             return
         }
-        if (!force) loading.value = true
+        const token = ++configLoadToken
+        let overlayTimer: number | undefined
+        // 守卫失败后，页面挂载会再要一次配置。第二次不要把全屏加载层重新盖上。
+        const showOverlay = !force && Date.now() - lastConfigFailureAt > 1500
+        if (showOverlay) {
+            loading.value = true
+            if (typeof window !== 'undefined') {
+                overlayTimer = window.setTimeout(() => {
+                    if (token === configLoadToken) loading.value = false
+                }, CONFIG_LOAD_LIMIT_MS)
+            }
+        }
         try {
             const requestTime = Date.now()
-            const response = await configAPI.get()
+            const response = await configAPI.get({ timeout: CONFIG_LOAD_LIMIT_MS })
             config.value = response.data.data
             // 计算服务器与客户端的时间偏移量
             if (config.value?.server_time) {
@@ -99,9 +115,11 @@ export const useAppStore = defineStore('app', () => {
                 )
             }
         } catch (error) {
+            lastConfigFailureAt = Date.now()
             console.error('Failed to load config:', error)
         } finally {
-            if (!force) loading.value = false
+            if (overlayTimer !== undefined) window.clearTimeout(overlayTimer)
+            if (showOverlay && token === configLoadToken) loading.value = false
         }
     }
 
