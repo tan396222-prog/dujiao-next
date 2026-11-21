@@ -16,12 +16,34 @@ const props = withDefaults(defineProps<{
   multiple?: boolean
   scene?: string
   dialogOnly?: boolean
+  allowedExtensions?: string[]
+  maxBytes?: number
 }>(), {
   modelValue: '',
   multiple: false,
   scene: 'common',
   dialogOnly: false,
+  allowedExtensions: () => [],
+  maxBytes: DEFAULT_UPLOAD_MAX_SIZE_BYTES,
 })
+
+const fileAccept = computed(() => (props.allowedExtensions.length > 0 ? props.allowedExtensions.join(',') : 'image/*'))
+
+function extensionAllowed(name: string) {
+  if (props.allowedExtensions.length === 0) return true
+  const lower = name.toLowerCase()
+  return props.allowedExtensions.some((ext) => lower.endsWith(ext.toLowerCase()))
+}
+
+function filterUploadFiles(files: File[]) {
+  const sized = filterFilesByUploadSize(files)
+  if (props.allowedExtensions.length === 0) return sized
+  const accepted = sized.filter((file) => extensionAllowed(file.name) && !/svg|gif/i.test(file.type))
+  if (accepted.length !== sized.length) {
+    notifyError(t('admin.media.errors.wallpaperType'))
+  }
+  return accepted
+}
 
 const emit = defineEmits<{
   'update:modelValue': [value: string | string[]]
@@ -57,7 +79,7 @@ const currentImages = computed(() => {
 const hasImage = computed(() => currentImages.value.length > 0)
 
 function filterFilesByUploadSize(files: File[]) {
-  const { accepted, rejected } = splitFilesBySize(files)
+  const { accepted, rejected } = splitFilesBySize(files, props.maxBytes)
   if (rejected.length > 0) {
     notifyError(t('admin.media.errors.fileTooLarge', {
       count: rejected.length,
@@ -110,6 +132,10 @@ function isSelected(path: string) {
 
 function confirmSelection() {
   const paths = Array.from(selected.value)
+  if (props.allowedExtensions.length > 0 && paths.some((path) => !extensionAllowed(path))) {
+    notifyError(t('admin.media.errors.wallpaperType'))
+    return
+  }
   if (props.multiple) {
     emit('update:modelValue', paths)
   } else {
@@ -137,7 +163,7 @@ function handleDialogDrop(e: DragEvent) {
 async function handleDialogUpload(e: Event) {
   const files = (e.target as HTMLInputElement).files
   if (!files || files.length === 0) return
-  const fileList = filterFilesByUploadSize(Array.from(files))
+  const fileList = filterUploadFiles(Array.from(files))
   if (fileList.length === 0) {
     if (dialogFileInput.value) dialogFileInput.value.value = ''
     return
@@ -204,7 +230,7 @@ async function handleDirectUpload(e: Event) {
 }
 
 async function doDirectUpload(files: File[]) {
-  const fileList = filterFilesByUploadSize(files)
+  const fileList = filterUploadFiles(files)
   if (fileList.length === 0) {
     if (fileInput.value) fileInput.value.value = ''
     return
@@ -290,7 +316,7 @@ defineExpose({ openPicker })
     @dragover.prevent="isDragOver = true"
     @dragleave="isDragOver = false"
   >
-    <input ref="fileInput" type="file" class="hidden" accept="image/*" :multiple="multiple" @change="handleDirectUpload" />
+    <input ref="fileInput" type="file" class="hidden" :accept="fileAccept" :multiple="multiple" @change="handleDirectUpload" />
 
     <!-- Has image(s) -->
     <div v-if="hasImage" class="p-4">
@@ -474,7 +500,7 @@ defineExpose({ openPicker })
             <span v-if="uploadProgress.total > 1" class="text-xs text-muted-foreground">{{ t('admin.media.uploadProgress', uploadProgress) }}</span>
           </div>
         </div>
-        <input ref="dialogFileInput" type="file" class="hidden" accept="image/*" :multiple="multiple" @change="handleDialogUpload" />
+        <input ref="dialogFileInput" type="file" class="hidden" :accept="fileAccept" :multiple="multiple" @change="handleDialogUpload" />
       </div>
 
       <!-- Footer -->

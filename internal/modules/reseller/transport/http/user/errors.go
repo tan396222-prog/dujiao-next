@@ -50,6 +50,8 @@ func siteConfigFieldErrorKey(field string) string {
 		return "error.reseller_support_url_invalid"
 	case "image":
 		return "error.reseller_image_invalid"
+	case "wallpaper":
+		return "error.wallpaper_invalid"
 	case "link":
 		return "error.reseller_link_invalid"
 	default:

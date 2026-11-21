@@ -8,6 +8,7 @@ import (
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/shared/contactlink"
 	"github.com/dujiao-next/internal/shared/jsonmap"
+	"github.com/dujiao-next/internal/shared/storeimage"
 )
 
 var settingSupportedLanguages = append([]string(nil), constants.SupportedLocales...)
@@ -158,6 +159,11 @@ func validateSiteSetting(value jsonmap.JSON) error {
 	if whatsApp, _ := contact["whatsapp"].(string); whatsApp != "" && !contactlink.IsWhatsApp(whatsApp) {
 		return &SettingFieldError{Field: "contact_whatsapp"}
 	}
+	brand, _ := value["brand"].(map[string]interface{})
+	wallpaper, _ := brand["wallpaper"].(string)
+	if _, err := storeimage.VerifyWallpaper(wallpaper); err != nil {
+		return &SettingFieldError{Field: "wallpaper"}
+	}
 	return nil
 }
 
@@ -168,6 +174,7 @@ func normalizeSiteBrand(raw interface{}) map[string]interface{} {
 		"site_url":         "",
 		"site_icon":        "",
 		"site_logo":        "",
+		"wallpaper":        "",
 		"site_description": normalizeSiteLocalizedField(nil),
 	}
 	brandMap, ok := raw.(map[string]interface{})
@@ -179,6 +186,8 @@ func normalizeSiteBrand(raw interface{}) map[string]interface{} {
 	result["site_icon"] = normalizeSettingText(brandMap["site_icon"])
 	// 未配置 Logo 时保留空字符串，让前台继续使用各主题原有的 fallback 行为。
 	result["site_logo"] = normalizeSettingText(brandMap["site_logo"])
+	// 壁纸只保存地址；空字符串表示使用主题默认背景。内容是否为真实图片由校验阶段确认。
+	result["wallpaper"] = normalizeSettingText(brandMap["wallpaper"])
 	result["site_description"] = normalizeSiteLocalizedField(brandMap["site_description"])
 	return result
 }

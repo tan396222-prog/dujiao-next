@@ -720,7 +720,7 @@
           "announcement": "Announcement"
         },
         "descriptions": {
-          "brand": "Set the site name, logo, and browser favicon",
+          "brand": "Set the site name, logo, browser favicon, and this store's wallpaper",
           "support": "Contact entries shown on the storefront; leave blank to hide",
           "seo": "Search engine and social sharing info, per language",
           "announcement": "An announcement shown to visitors in a popup on the storefront home page",
@@ -766,6 +766,9 @@
         "upload": "Upload",
         "replace": "Replace",
         "uploadHint": "JPG / PNG / WebP / GIF / SVG, within the site size limit",
+        "wallpaperHint": "Affects only this store. JPG, PNG, or WebP, up to 8 MB, longest side 4096 px. Remove and save to inherit again: the main store wallpaper is used, or the original theme background when the main store has none. This does not change the main store or other agents.",
+        "wallpaperRemove": "Remove wallpaper",
+        "wallpaperInvalid": "Choose a JPG, PNG, or WebP image up to 8 MB",
         "uploadFailed": "Image upload failed, please try again",
         "editor": {
           "placeholder": "Write the announcement, with images, links and formatting…",
@@ -795,6 +798,7 @@
           "siteName": "Site Name",
           "logo": "Logo URL",
           "favicon": "Favicon URL",
+          "wallpaper": "Store wallpaper",
           "telegram": "Telegram",
           "whatsapp": "WhatsApp",
           "email": "Support Email",

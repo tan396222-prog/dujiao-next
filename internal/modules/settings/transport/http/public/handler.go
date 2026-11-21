@@ -11,6 +11,7 @@ import (
 	reseller "github.com/dujiao-next/internal/modules/reseller/contract"
 	"github.com/dujiao-next/internal/platform/http/response"
 	"github.com/dujiao-next/internal/shared/jsonmap"
+	"github.com/dujiao-next/internal/shared/storeimage"
 	"github.com/dujiao-next/internal/version"
 
 	"github.com/gin-gonic/gin"
@@ -239,11 +240,22 @@ func (h *Handler) GetConfig(c *gin.Context) {
 	} else if tenant.ResellerID == nil {
 		data["tenant"] = map[string]interface{}{"mode": "main", "host": tenant.Host}
 	}
+	sanitizePublicWallpaper(data)
 
 	_ = h.cache.SetJSON(c.Request.Context(), cacheKey, data, publicConfigCacheTTL)
 	data["server_time"] = time.Now().UnixMilli()
 	data["app_version"] = version.Version
 	response.Success(c, data)
+}
+
+// sanitizePublicWallpaper 前台只拿到通过路径校验的本地图片地址，不暴露管理端字段。
+func sanitizePublicWallpaper(data map[string]interface{}) {
+	brand, _ := data["brand"].(map[string]interface{})
+	if brand == nil {
+		return
+	}
+	text, _ := brand["wallpaper"].(string)
+	brand["wallpaper"] = storeimage.PublicWallpaper(text)
 }
 
 func stringValue(value interface{}) string {

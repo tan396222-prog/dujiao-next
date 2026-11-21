@@ -901,6 +901,7 @@ export interface AdminResellerSiteConfigPayload {
   site_name?: string
   logo?: string
   favicon?: string
+  wallpaper?: string
   announcement?: {
     enabled?: boolean
     type?: string
@@ -939,6 +940,7 @@ export interface AdminResellerSiteConfig extends Required<Pick<AdminResellerSite
   site_name: string
   logo: string
   favicon: string
+  wallpaper: string
   footer_links: Array<{
     name?: AdminResellerLocalizedText
     url?: string

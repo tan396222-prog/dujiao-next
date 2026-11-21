@@ -10,7 +10,7 @@
         :aria-label="modelValue ? replaceLabel : uploadLabel"
         @click="triggerUpload"
       >
-        <img v-if="modelValue && !broken" :src="preview" alt="" class="h-full w-full object-contain" @error="broken = true" />
+        <img v-if="modelValue && !broken" :src="preview" alt="" class="h-full w-full" :class="cover ? 'object-cover' : 'object-contain'" @error="broken = true" />
         <Loader2 v-else-if="uploading" class="h-5 w-5 animate-spin text-muted-foreground" />
         <ImageOff v-else-if="modelValue && broken" class="h-5 w-5 text-destructive/60" />
         <span v-else class="flex flex-col items-center gap-1 text-muted-foreground">
@@ -36,7 +36,7 @@
             @click="emit('update:modelValue', '')"
           >
             <Trash2 class="mr-1.5 h-3.5 w-3.5" />
-            {{ removeLabel }}
+            {{ removeText || removeLabel }}
           </Button>
         </div>
         <p v-if="error" class="text-xs text-destructive">{{ error }}</p>
@@ -44,7 +44,7 @@
       </div>
     </div>
 
-    <input ref="fileInput" type="file" accept="image/*" class="hidden" @change="onFileChange" />
+    <input ref="fileInput" type="file" :accept="accept || 'image/*'" class="hidden" @change="onFileChange" />
   </div>
 </template>
 
@@ -55,12 +55,17 @@ import { ImageOff, ImagePlus, Loader2, Trash2, Upload } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { resellerAPI } from '../../api'
 import { getImageUrl } from '../../utils/image'
+import { STORE_WALLPAPER_MAX_BYTES } from '../../utils/storeWallpaper'
 
 const props = defineProps<{
   modelValue: string
   label?: string
   hint?: string
   wide?: boolean
+  cover?: boolean
+  accept?: string
+  removeText?: string
+  wallpaper?: boolean
 }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: string): void }>()
 
@@ -89,6 +94,14 @@ const onFileChange = async (e: Event) => {
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
+  if (props.wallpaper) {
+    const extOk = /\.(jpe?g|png|webp)$/i.test(file.name)
+    const typeOk = file.type === '' || file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp'
+    if (!extOk || !typeOk || file.size > STORE_WALLPAPER_MAX_BYTES || /svg|gif/i.test(file.type)) {
+      error.value = t('personalCenter.reseller.siteConfig.wallpaperInvalid')
+      return
+    }
+  }
   uploading.value = true
   error.value = ''
   try {

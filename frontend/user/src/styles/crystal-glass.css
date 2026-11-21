@@ -708,3 +708,29 @@ html[data-skin="crystal"] button.bg-destructive {
   40% { opacity: 1; }
   100% { opacity: 0.4; transform: translateX(16%); }
 }
+
+/* 有店铺壁纸时，照片铺满视口，上面只留一层浅色遮罩，玻璃仍能透出背景。没有壁纸时不改原主题。 */
+html[data-wallpaper="1"],
+html[data-wallpaper="1"] body {
+  background-color: #cbb6ea !important;
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(226, 210, 255, 0.2)),
+    var(--store-wallpaper) !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-attachment: fixed !important;
+  background-repeat: no-repeat !important;
+}
+
+html.dark[data-wallpaper="1"],
+html.dark[data-wallpaper="1"] body {
+  background-color: #140f1c !important;
+  background-image:
+    linear-gradient(180deg, rgba(14, 9, 24, 0.48), rgba(24, 14, 40, 0.3)),
+    var(--store-wallpaper) !important;
+}
+
+html[data-wallpaper="1"] :is(#app, .vault-scope) {
+  background-color: transparent !important;
+  background-image: none !important;
+}
