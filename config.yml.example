@@ -16,6 +16,13 @@ server:
   # X-Forwarded-For，不能把用户原来的头原样追加在前面。
   # 程序不读取 X-Real-IP 或 CF-Connecting-IP。Docker/CDN 部署必须改成真实代理网段，
   # 禁止配置 0.0.0.0/0 或 ::/0。
+  # 上线前只读核对，不要改 Redis 端口：
+  # 1. trusted_proxies 只填真正连到本进程的代理地址。Caddy 同机时保持回环；
+  #    Caddy 会发送 X-Forwarded-For 时这里不能留空，也不能写成 0.0.0.0/0 或 ::/0。
+  # 2. Caddy 必须覆盖而不是追加：header_up X-Forwarded-For {remote_host}
+  # 3. 非代理来源带上 X-Forwarded-For: 1.2.3.4 时，日志应是 TCP 对端，不是 1.2.3.4。
+  #    从已信任代理来的同一头应记成客户地址。
+  # 4. Redis 保持现有端口，不要为这次改动新开放到公网。
   trusted_proxies:
     - 127.0.0.1/32
     - ::1/128

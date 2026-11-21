@@ -303,3 +303,48 @@ func (r *Store) GetByIDForUpdate(id uint) (*paymentdomain.Payment, error) {
 	}
 	return &payment, nil
 }
+
+// GetProviderClaimForUpdate 锁定一条外部交易号占用。不存在时返回 nil。
+func (r *Store) GetProviderClaimForUpdate(scopeKey, providerRef string) (*paymentdomain.ProviderClaim, error) {
+	scopeKey = strings.TrimSpace(scopeKey)
+	providerRef = strings.TrimSpace(providerRef)
+	if scopeKey == "" || providerRef == "" {
+		return nil, nil
+	}
+	var claim paymentdomain.ProviderClaim
+	err := r.db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("scope_key = ? AND provider_ref = ?", scopeKey, providerRef).
+		First(&claim).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &claim, nil
+}
+
+// CreateProviderClaim 写入外部交易号占用。重复写入返回冲突，不覆盖原支付。
+func (r *Store) CreateProviderClaim(claim *paymentdomain.ProviderClaim) error {
+	if claim == nil {
+		return errors.New("nil provider claim")
+	}
+	if err := r.db.Create(claim).Error; err != nil {
+		if providerClaimConflict(err) {
+			return paymentcontract.ErrProviderClaimConflict
+		}
+		return err
+	}
+	return nil
+}
+
+func providerClaimConflict(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "unique") || strings.Contains(text, "duplicate")
+}

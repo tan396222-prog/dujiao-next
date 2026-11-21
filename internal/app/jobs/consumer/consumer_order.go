@@ -408,7 +408,7 @@ func (c *Consumer) deliverCouponSale(order *orderdomain.Order) error {
 		return nil
 	}
 	switch order.Status {
-	case constants.OrderStatusPaid, constants.OrderStatusFulfilling:
+	case constants.OrderStatusPaid, constants.OrderStatusFulfilling, constants.OrderStatusPartiallyRefunded:
 	default:
 		return nil
 	}
@@ -421,7 +421,9 @@ func (c *Consumer) deliverCouponSale(order *orderdomain.Order) error {
 		if locked == nil {
 			return nil
 		}
-		if locked.Status != constants.OrderStatusPaid && locked.Status != constants.OrderStatusFulfilling {
+		switch locked.Status {
+		case constants.OrderStatusPaid, constants.OrderStatusFulfilling, constants.OrderStatusPartiallyRefunded:
+		default:
 			return nil
 		}
 		if _, found, err := tx.Fulfillments().FindByOrderIDForUpdate(order.ID); err != nil {
@@ -443,11 +445,18 @@ func (c *Consumer) deliverCouponSale(order *orderdomain.Order) error {
 				if err != nil {
 					return err
 				}
+				coupon, err := tx.Coupons().GetByCode(code)
+				if err != nil {
+					return err
+				}
+				if coupon == nil || !coupon.IsActive {
+					continue
+				}
 				codes = append(codes, code)
 			}
 		}
 		if len(codes) == 0 {
-			return errors.New("coupon sale order has no coupon item")
+			return nil
 		}
 		now := time.Now()
 		fulfillment := &fulfillmentdomain.Fulfillment{
@@ -461,6 +470,9 @@ func (c *Consumer) deliverCouponSale(order *orderdomain.Order) error {
 		}
 		if err := tx.Fulfillments().Create(fulfillment); err != nil {
 			return err
+		}
+		if locked.Status == constants.OrderStatusPartiallyRefunded {
+			return nil
 		}
 		return tx.Orders().UpdateFields(order.ID, map[string]interface{}{
 			"status":     constants.OrderStatusCompleted,

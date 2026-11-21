@@ -690,6 +690,9 @@ func (s *OrderService) createOrder(input orderCreateParams) (*orderdomain.Order,
 			if lockedCoupon == nil {
 				return couponcontract.ErrNotFound
 			}
+			if !lockedCoupon.IsActive {
+				return couponcontract.ErrInactive
+			}
 			if lockedCoupon.UsageLimit > 0 && lockedCoupon.UsedCount >= lockedCoupon.UsageLimit {
 				return couponcontract.ErrUsageLimit
 			}
@@ -727,6 +730,7 @@ func (s *OrderService) createOrder(input orderCreateParams) (*orderdomain.Order,
 	if err != nil {
 		for _, couponErr := range []error{
 			couponcontract.ErrNotFound,
+			couponcontract.ErrInactive,
 			couponcontract.ErrUsageLimit,
 			couponcontract.ErrPerUserLimit,
 		} {

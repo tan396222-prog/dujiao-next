@@ -9,6 +9,7 @@ import (
 	orderdomain "github.com/dujiao-next/internal/modules/order/domain"
 	paymentdomain "github.com/dujiao-next/internal/modules/payment/domain"
 	settingsstore "github.com/dujiao-next/internal/modules/settings/infrastructure/gormstore"
+	settingssecurity "github.com/dujiao-next/internal/modules/settings/schema/security"
 	"github.com/dujiao-next/internal/platform/database/gormdb"
 	"github.com/dujiao-next/internal/shared/jsonmap"
 	"github.com/dujiao-next/internal/shared/money"
@@ -344,4 +345,150 @@ func TestEnsurePaymentChannelBepusdtConfigMigration_NormalizesLegacyChannels(t *
 	if !migrationDone(marker.ValueJSON) || marker.ValueJSON["migrated_count"] != float64(len(tests)+1) {
 		t.Fatalf("unexpected marker: %v", marker.ValueJSON)
 	}
+}
+
+func TestEnsurePaymentProviderClaimsKeepsEarliestDuplicateAndStarts(t *testing.T) {
+	db := setupPaymentProviderRenameTestDB(t)
+	if err := db.AutoMigrate(&paymentdomain.ProviderClaim{}); err != nil {
+		t.Fatalf("migrate claims: %v", err)
+	}
+	now := time.Now()
+	channel := &paymentdomain.PaymentChannel{
+		Name: "epay", ProviderType: constants.PaymentProviderEpay, ChannelType: constants.PaymentChannelTypeAlipay,
+		InteractionMode: constants.PaymentInteractionRedirect, ConfigJSON: jsonmap.JSON{"merchant_id": "pid-1"},
+		IsActive: true, CreatedAt: now, UpdatedAt: now,
+	}
+	other := &paymentdomain.PaymentChannel{
+		Name: "other", ProviderType: constants.PaymentProviderEpay, ChannelType: constants.PaymentChannelTypeWxpay,
+		InteractionMode: constants.PaymentInteractionRedirect, ConfigJSON: jsonmap.JSON{"merchant_id": "pid-2"},
+		IsActive: true, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(channel).Error; err != nil || db.Create(other).Error != nil {
+		t.Fatalf("create channels: %v", err)
+	}
+	payments := []paymentdomain.Payment{
+		{
+			OrderID: 1, ChannelID: channel.ID, ProviderType: constants.PaymentProviderEpay, ChannelType: channel.ChannelType,
+			InteractionMode: channel.InteractionMode, Amount: money.FromDecimal(decimal.NewFromInt(10)),
+			Currency: "CNY", Status: constants.PaymentStatusSuccess, ProviderRef: "TRADE-DUP", CreatedAt: now, UpdatedAt: now,
+		},
+		{
+			OrderID: 2, ChannelID: channel.ID, ProviderType: constants.PaymentProviderEpay, ChannelType: channel.ChannelType,
+			InteractionMode: channel.InteractionMode, Amount: money.FromDecimal(decimal.NewFromInt(10)),
+			Currency: "CNY", Status: constants.PaymentStatusSuccess, ProviderRef: "TRADE-DUP", CreatedAt: now, UpdatedAt: now,
+		},
+		{
+			OrderID: 3, ChannelID: channel.ID, ProviderType: constants.PaymentProviderEpay, ChannelType: channel.ChannelType,
+			InteractionMode: channel.InteractionMode, Amount: money.FromDecimal(decimal.NewFromInt(10)),
+			Currency: "CNY", Status: constants.PaymentStatusSuccess, ProviderRef: "   ", CreatedAt: now, UpdatedAt: now,
+		},
+		{
+			OrderID: 4, ChannelID: other.ID, ProviderType: constants.PaymentProviderEpay, ChannelType: other.ChannelType,
+			InteractionMode: other.InteractionMode, Amount: money.FromDecimal(decimal.NewFromInt(10)),
+			Currency: "CNY", Status: constants.PaymentStatusSuccess, ProviderRef: "TRADE-DUP", CreatedAt: now, UpdatedAt: now,
+		},
+	}
+	if err := db.Create(&payments).Error; err != nil {
+		t.Fatalf("seed payments: %v", err)
+	}
+	if err := ensurePaymentProviderClaims(db); err != nil {
+		t.Fatalf("backfill claims: %v", err)
+	}
+	if err := ensurePaymentProviderClaims(db); err != nil {
+		t.Fatalf("repeat backfill: %v", err)
+	}
+	var claims []paymentdomain.ProviderClaim
+	if err := db.Order("id asc").Find(&claims).Error; err != nil {
+		t.Fatalf("load claims: %v", err)
+	}
+	if len(claims) != 2 {
+		t.Fatalf("claims = %+v, want the earliest duplicate and the other merchant", claims)
+	}
+	if claims[0].PaymentID != payments[0].ID || claims[0].OrderID != 1 {
+		t.Fatalf("earliest claim = %+v, want payment %d", claims[0], payments[0].ID)
+	}
+	if claims[1].PaymentID != payments[3].ID {
+		t.Fatalf("other merchant claim = %+v", claims[1])
+	}
+	var still []paymentdomain.Payment
+	if err := db.Where("provider_ref = ?", "TRADE-DUP").Find(&still).Error; err != nil {
+		t.Fatalf("reload payments: %v", err)
+	}
+	if len(still) != 3 {
+		t.Fatalf("historical duplicate payments were deleted: %+v", still)
+	}
+}
+
+func TestEnsureOrderAttemptLimitFloorEnablesBanOnceWithoutMasterSwitch(t *testing.T) {
+	db := setupPaymentProviderRenameTestDB(t)
+	cfg := settingssecurity.DefaultOrderRiskControlConfig()
+	cfg.Enabled = false
+	cfg.Guest.MaxPendingOrdersPerIP = 2
+	cfg.Common.AttemptLimit.Enabled = false
+	if err := db.Create(&settingsstore.SettingRecord{
+		Key:       constants.SettingKeyOrderRiskControlConfig,
+		ValueJSON: settingssecurity.EncodeOrderRiskControlConfig(cfg),
+	}).Error; err != nil {
+		t.Fatalf("seed risk config: %v", err)
+	}
+	if err := ensureOrderAttemptLimitFloor(db); err != nil {
+		t.Fatalf("apply floor: %v", err)
+	}
+	stored := reloadRiskConfig(t, db)
+	if stored.Enabled {
+		t.Fatal("master switch must stay off")
+	}
+	if stored.Guest.MaxPendingOrdersPerIP != 2 {
+		t.Fatalf("guest quota changed to %d", stored.Guest.MaxPendingOrdersPerIP)
+	}
+	if !stored.Common.AttemptLimit.Enabled || stored.Common.AttemptLimit.WindowSeconds != 60 ||
+		stored.Common.AttemptLimit.MaxRequests != 20 || stored.Common.AttemptLimit.BlockSeconds != 86400 {
+		t.Fatalf("attempt limit = %+v", stored.Common.AttemptLimit)
+	}
+
+	stored.Common.AttemptLimit.Enabled = false
+	if err := db.Model(&settingsstore.SettingRecord{}).
+		Where("key = ?", constants.SettingKeyOrderRiskControlConfig).
+		Update("value_json", settingssecurity.EncodeOrderRiskControlConfig(stored)).Error; err != nil {
+		t.Fatalf("admin disables ban: %v", err)
+	}
+	if err := ensureOrderAttemptLimitFloor(db); err != nil {
+		t.Fatalf("second boot: %v", err)
+	}
+	if reloadRiskConfig(t, db).Common.AttemptLimit.Enabled {
+		t.Fatal("a later boot must not turn the ban back on after an admin disables it")
+	}
+}
+
+func TestEnsureOrderAttemptLimitFloorSkipsWhenConfigMissing(t *testing.T) {
+	db := setupPaymentProviderRenameTestDB(t)
+	if err := ensureOrderAttemptLimitFloor(db); err != nil {
+		t.Fatalf("apply floor: %v", err)
+	}
+	var count int64
+	if err := db.Model(&settingsstore.SettingRecord{}).
+		Where("key = ?", constants.SettingKeyOrderRiskControlConfig).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count risk config: %v", err)
+	}
+	if count != 0 {
+		t.Fatal("missing config should keep the code default instead of writing a new risk row")
+	}
+	if err := db.Model(&settingsstore.SettingRecord{}).
+		Where("key = ?", constants.SettingKeyOrderAttemptLimitFloor).
+		Count(&count).Error; err != nil {
+		t.Fatalf("count marker: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("marker count = %d", count)
+	}
+}
+
+func reloadRiskConfig(t *testing.T, db *gorm.DB) settingssecurity.OrderRiskControlConfig {
+	t.Helper()
+	var record settingsstore.SettingRecord
+	if err := db.Where("key = ?", constants.SettingKeyOrderRiskControlConfig).First(&record).Error; err != nil {
+		t.Fatalf("reload risk config: %v", err)
+	}
+	return settingssecurity.DecodeOrderRiskControlConfig(record.ValueJSON, settingssecurity.DefaultOrderRiskControlConfig())
 }

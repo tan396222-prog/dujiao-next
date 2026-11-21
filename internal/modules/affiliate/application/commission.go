@@ -339,7 +339,19 @@ func (s *Service) HandleOrderRefunded(
 			auditReason = strings.TrimSpace(auditReason + " " + reversalMarker)
 		}
 		if walletAttempted && recovered.LessThan(deduct) {
-			auditReason = strings.TrimSpace(auditReason + " wallet_shortfall=" + deduct.Sub(recovered).StringFixed(2))
+			shortfall := deduct.Sub(recovered).Round(2)
+			lockedProfile, profileErr := repoTx.GetProfileByIDForUpdate(item.AffiliateProfileID)
+			if profileErr != nil {
+				return profileErr
+			}
+			if lockedProfile != nil && shortfall.GreaterThan(decimal.Zero) {
+				lockedProfile.UnrecoveredCommission = money.FromDecimal(lockedProfile.UnrecoveredCommission.Decimal.Add(shortfall).Round(2))
+				lockedProfile.UpdatedAt = now
+				if err := repoTx.UpdateProfileDebt(lockedProfile); err != nil {
+					return err
+				}
+			}
+			auditReason = strings.TrimSpace(auditReason + " wallet_shortfall=" + shortfall.StringFixed(2))
 		}
 		item.InvalidReason = clipAuditReason(auditReason)
 		if nextCommission.LessThanOrEqual(decimal.Zero) {
@@ -469,42 +481,119 @@ func (s *Service) creditCommissionToWallet(commission *affiliatedomain.Commissio
 	if amount.LessThanOrEqual(decimal.Zero) {
 		return nil
 	}
-	profile, err := s.repo.GetProfileByID(commission.AffiliateProfileID)
+	prepared, err := s.prepareCommissionWalletCredit(commission.ID)
 	if err != nil {
 		return err
 	}
-	if profile == nil || profile.UserID == 0 {
+	if prepared == nil || prepared.UserID == 0 {
 		return nil
 	}
-	currency := "CNY"
-	var orderID *uint
-	if order != nil {
-		if trimmed := strings.ToUpper(strings.TrimSpace(order.Currency)); trimmed != "" {
-			currency = trimmed
+	net := prepared.CreditNetAmount.Decimal.Round(2)
+	if net.GreaterThan(decimal.Zero) {
+		currency := "CNY"
+		var orderID *uint
+		if order != nil {
+			if trimmed := strings.ToUpper(strings.TrimSpace(order.Currency)); trimmed != "" {
+				currency = trimmed
+			}
+			id := order.ID
+			orderID = &id
 		}
-		id := order.ID
-		orderID = &id
-	}
-	reference := fmt.Sprintf("affiliate-commission:%d", commission.ID)
-	if err := s.walletTx.WithinTransaction(func(tx walletcontract.Transaction) error {
-		_, _, creditErr := s.wallet.CreditInTransaction(tx, walletcontract.CreditInput{
-			UserID:    profile.UserID,
-			Amount:    money.FromDecimal(amount),
-			Currency:  currency,
-			Type:      constants.WalletTxnTypeAffiliateCommission,
-			Reference: reference,
-			Remark:    "推广佣金转入可购物余额",
-			OrderID:   orderID,
-		})
-		return creditErr
-	}); err != nil {
-		return err
+		reference := fmt.Sprintf("affiliate-commission:%d", prepared.ID)
+		remark := "推广佣金转入可购物余额"
+		if prepared.CreditDebtOffset.Decimal.GreaterThan(decimal.Zero) {
+			remark = fmt.Sprintf("%s debt_offset=%s", remark, prepared.CreditDebtOffset.Decimal.StringFixed(2))
+		}
+		if err := s.walletTx.WithinTransaction(func(tx walletcontract.Transaction) error {
+			_, _, creditErr := s.wallet.CreditInTransaction(tx, walletcontract.CreditInput{
+				UserID:    prepared.UserID,
+				Amount:    money.FromDecimal(net),
+				Currency:  currency,
+				Type:      constants.WalletTxnTypeAffiliateCommission,
+				Reference: reference,
+				Remark:    remark,
+				OrderID:   orderID,
+			})
+			return creditErr
+		}); err != nil {
+			return err
+		}
 	}
 	now := time.Now()
-	commission.Status = constants.AffiliateCommissionStatusWalletCredited
-	commission.AvailableAt = &now
-	commission.UpdatedAt = now
-	return s.repo.UpdateCommission(commission)
+	prepared.Status = constants.AffiliateCommissionStatusWalletCredited
+	prepared.AvailableAt = &now
+	prepared.UpdatedAt = now
+	return s.repo.UpdateCommission(&prepared.Commission)
+}
+
+// prepareCommissionWalletCredit 先用新佣金抵扣这个推广人尚未追回的退款欠款。
+// 抵扣结果按佣金 ID 只记一次。买家退款不读取其他客户的余额。
+func (s *Service) prepareCommissionWalletCredit(commissionID uint) (*preparedCommissionCredit, error) {
+	if s == nil || s.repo == nil || commissionID == 0 {
+		return nil, nil
+	}
+	var prepared *preparedCommissionCredit
+	err := s.repo.WithinTransaction(func(tx affiliatecontract.Store) error {
+		item, err := tx.GetCommissionByIDForUpdate(commissionID)
+		if err != nil {
+			return err
+		}
+		if item == nil {
+			return nil
+		}
+		profile, err := tx.GetProfileByIDForUpdate(item.AffiliateProfileID)
+		if err != nil {
+			return err
+		}
+		if profile == nil || profile.UserID == 0 {
+			return nil
+		}
+		if !item.CreditPrepared {
+			gross := item.CommissionAmount.Decimal.Round(2)
+			debt := profile.UnrecoveredCommission.Decimal.Round(2)
+			if debt.IsNegative() {
+				debt = decimal.Zero
+			}
+			offset := gross
+			if offset.GreaterThan(debt) {
+				offset = debt
+			}
+			if offset.IsNegative() {
+				offset = decimal.Zero
+			}
+			net := gross.Sub(offset).Round(2)
+			if net.IsNegative() {
+				net = decimal.Zero
+			}
+			now := time.Now()
+			profile.UnrecoveredCommission = money.FromDecimal(debt.Sub(offset).Round(2))
+			profile.UpdatedAt = now
+			if err := tx.UpdateProfileDebt(profile); err != nil {
+				return err
+			}
+			item.CreditPrepared = true
+			item.CreditNetAmount = money.FromDecimal(net)
+			item.CreditDebtOffset = money.FromDecimal(offset)
+			item.UpdatedAt = now
+			if err := tx.UpdateCommission(item); err != nil {
+				return err
+			}
+		}
+		prepared = &preparedCommissionCredit{
+			Commission: *item,
+			UserID:     profile.UserID,
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return prepared, nil
+}
+
+type preparedCommissionCredit struct {
+	affiliatedomain.Commission
+	UserID uint
 }
 
 func (s *Service) debitWalletCommission(commission *affiliatedomain.Commission, amount decimal.Decimal, reference, remark string) error {

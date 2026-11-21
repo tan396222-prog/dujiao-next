@@ -3048,7 +3048,7 @@ const messages = {
           },
           attemptLimit: {
             title: '同 IP 下单尝试封禁',
-            subtitle: '游客、登录用户和购物车批量下单共用这一条。成功和失败的真实下单都计数，浏览和订单预览不计。默认 60 秒内 20 次后封禁 24 小时，到期自动解除，也可以在这里解封。这不是永久封账户。共享网络可能误伤。',
+            subtitle: '游客、登录用户和购物车批量下单共用这一条。成功和失败的真实下单都计数，浏览和订单预览不计。默认 60 秒内 20 次后封禁 24 小时，到期自动解除，也可以在这里解封。这不是永久封账户。共享网络可能误伤。支付回调、钱包充值和自动发货不计入次数，也不会被这条封禁拦住。',
             deviceHint: '可选的辅助标记由本站签发，24 小时过期。它不是浏览器指纹，不能识别同一个人，也不能单独触发封禁。没有脚本的浏览器仍可下单。伪造或复制标记不能把封禁嫁祸到别人的 IP。',
             enabled: '启用同 IP 下单封禁',
           },
@@ -7801,7 +7801,7 @@ const messages = {
           },
           attemptLimit: {
             title: '同 IP 下單嘗試封禁',
-            subtitle: '遊客、登入用戶和購物車批量下單共用這一條。成功和失敗的真實下單都計數，瀏覽和訂單預覽不計。預設 60 秒內 20 次後封禁 24 小時，到期自動解除，也可以在這裡解封。這不是永久封帳戶。共享網路可能誤傷。',
+            subtitle: '遊客、登入用戶和購物車批量下單共用這一條。成功和失敗的真實下單都計數，瀏覽和訂單預覽不計。預設 60 秒內 20 次後封禁 24 小時，到期自動解除，也可以在這裡解封。這不是永久封帳戶。共享網路可能誤傷。支付回調、錢包充值和自動發貨不計入次數，也不會被這條封禁攔住。',
             deviceHint: '可選的輔助標記由本站簽發，24 小時過期。它不是瀏覽器指紋，不能識別同一個人，也不能單獨觸發封禁。沒有腳本的瀏覽器仍可下單。偽造或複製標記不能把封禁嫁禍到別人的 IP。',
             enabled: '啟用同 IP 下單封禁',
           },
@@ -12554,7 +12554,7 @@ const messages = {
           },
           attemptLimit: {
             title: 'Same-IP order attempt ban',
-            subtitle: 'Guests, signed-in users, and cart checkout share this counter. Successful and failed real order attempts count. Browsing and order preview do not. The default is 20 attempts in 60 seconds, then a 24-hour ban that expires on its own and can be cleared here. Accounts are not permanently banned. Shared networks can be affected.',
+            subtitle: 'Guests, signed-in users, and cart checkout share this counter. Successful and failed real order attempts count. Browsing and order preview do not. The default is 20 attempts in 60 seconds, then a 24-hour ban that expires on its own and can be cleared here. Accounts are not permanently banned. Shared networks can be affected. Payment callbacks, wallet top-ups, and fulfillment are not counted and cannot be blocked by this ban.',
             deviceHint: 'The optional helper mark is issued by this site and expires in 24 hours. It is not a browser fingerprint, does not identify a person, and never bans anyone by itself. Browsers without JavaScript can still order. A forged or copied mark cannot move the ban onto someone else\'s IP.',
             enabled: 'Enable same-IP order ban',
           },

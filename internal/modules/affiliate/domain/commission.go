@@ -16,6 +16,9 @@ type Commission struct {
 	BaseAmount         money.Amount `gorm:"type:decimal(20,2);not null;default:0" json:"base_amount"`                                                      // 佣金基数金额
 	RatePercent        money.Amount `gorm:"type:decimal(10,2);not null;default:0" json:"rate_percent"`                                                     // 佣金比例（百分比）
 	CommissionAmount   money.Amount `gorm:"type:decimal(20,2);not null;default:0" json:"commission_amount"`                                                // 佣金金额
+	CreditPrepared     bool         `gorm:"not null;default:false" json:"-"`                                                                               // 是否已经计算过欠款抵扣
+	CreditNetAmount    money.Amount `gorm:"type:decimal(20,2);not null;default:0" json:"-"`                                                                // 抵扣欠款后实际入账金额
+	CreditDebtOffset   money.Amount `gorm:"type:decimal(20,2);not null;default:0" json:"-"`                                                                // 这笔佣金抵掉的历史欠款
 	Status             string       `gorm:"type:varchar(32);not null;index" json:"status"`                                                                 // 佣金状态
 	ConfirmAt          *time.Time   `gorm:"index" json:"confirm_at,omitempty"`                                                                             // 待确认到期时间
 	AvailableAt        *time.Time   `gorm:"index" json:"available_at,omitempty"`                                                                           // 转可提现时间

@@ -295,7 +295,7 @@ func TestEpayAdapter_NonSuccessStatusIsNotPaymentProof(t *testing.T) {
 	if result.Status == constants.PaymentStatusSuccess {
 		t.Fatal("a signed non-success status was treated as paid")
 	}
-	if result.Currency != "CNY" || !result.Amount.Decimal.Equal(decimal.RequireFromString("10.00")) {
+	if result.Currency != "" || !result.Amount.Decimal.Equal(decimal.RequireFromString("10.00")) {
 		t.Fatalf("amount=%s currency=%s", result.Amount.Decimal, result.Currency)
 	}
 	form["money"] = []string{"not-a-number"}

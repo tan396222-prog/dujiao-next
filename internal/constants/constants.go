@@ -511,6 +511,9 @@ const (
 	SettingFieldRegistrationInviteOnly      = "invite_only_enabled"
 
 	SettingKeyOrderRiskControlConfig = "order_risk_control_config"
+	// SettingKeyOrderAttemptLimitFloor 记录首次部署已把 60 秒 20 次、封禁 24 小时写入配置。
+	// 之后管理员可以自己关闭；启动时不会再次打开。
+	SettingKeyOrderAttemptLimitFloor = "order_attempt_limit_floor_v1"
 
 	SettingKeyUpstreamSyncConfig        = "upstream_sync_config"
 	SettingFieldUpstreamSyncIntervalMin = "interval_minutes"

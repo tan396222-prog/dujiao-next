@@ -233,6 +233,126 @@ func TestCommissionWalletCreditIsIdempotentAndRefundClawsBack(t *testing.T) {
 	if !account.Balance.Decimal.Equal(decimal.Zero) {
 		t.Fatalf("repeat short refund changed balance to %s", account.Balance.Decimal)
 	}
+	profile, err := store.GetProfileByID(profileID)
+	if err != nil || profile == nil || !profile.UnrecoveredCommission.Decimal.Equal(decimal.NewFromInt(9)) {
+		t.Fatalf("unrecovered commission want 9, got %+v err %v", profile, err)
+	}
+}
+
+func TestFutureCommissionOffsetsUnrecoveredDebtWithoutTouchingOtherWallets(t *testing.T) {
+	first := paidOrder(100, 0, 100, []orderdomain.OrderItem{
+		{ProductID: 1, TotalPrice: money.FromDecimal(decimal.NewFromInt(100))},
+	})
+	second := paidOrder(100, 0, 100, []orderdomain.OrderItem{
+		{ProductID: 1, TotalPrice: money.FromDecimal(decimal.NewFromInt(100))},
+	})
+	third := paidOrder(100, 0, 100, []orderdomain.OrderItem{
+		{ProductID: 1, TotalPrice: money.FromDecimal(decimal.NewFromInt(100))},
+	})
+	first.ID = 11
+	second.ID = 12
+	third.ID = 13
+	orders := orderMapReader{first.ID: first, second.ID: second, third.ID: third}
+
+	_, db, _ := setupAffiliateServiceTest(t)
+	sqlDB, err := db.DB()
+	if err != nil {
+		t.Fatalf("sql db: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
+	if err := db.AutoMigrate(&affiliatedomain.Commission{}, &walletdomain.Account{}, &walletdomain.Transaction{}); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	promoter := createAffiliateTestUser(t, db, "promoter-debt@example.com")
+	buyer := createAffiliateTestUser(t, db, "buyer-debt@example.com")
+	other := createAffiliateTestUser(t, db, "other-wallet@example.com")
+	profile := createAffiliateTestProfile(t, db, promoter.ID, "PROMODEBT", constants.AffiliateProfileStatusActive)
+	for _, order := range []*orderdomain.Order{first, second, third} {
+		order.UserID = buyer.ID
+		order.AffiliateProfileID = &profile.ID
+	}
+	settings := settingsapp.NewService(memorysettings.New())
+	if _, err := settings.UpdateAffiliateSetting(settingsintegration.AffiliateSetting{Enabled: true, CommissionRate: 20}); err != nil {
+		t.Fatalf("setting: %v", err)
+	}
+	store := affiliategormstore.New(db)
+	walletStore := walletgormstore.New(db)
+	svc := affiliateapp.NewService(store, userstore.New(db), orders, enabledProducts{1: true}, settings)
+	svc.SetWallet(walletapp.NewService(walletapp.Options{Repository: walletStore, Transactions: walletStore}), walletStore)
+
+	if err := svc.HandleOrderPaid(first.ID); err != nil {
+		t.Fatalf("credit first commission: %v", err)
+	}
+	account, err := walletStore.GetAccountByUserID(promoter.ID)
+	if err != nil || account == nil {
+		t.Fatalf("load promoter wallet: %+v err %v", account, err)
+	}
+	account.Balance = money.FromDecimal(decimal.Zero)
+	if err := db.Save(account).Error; err != nil {
+		t.Fatalf("empty promoter wallet: %v", err)
+	}
+	if err := svc.HandleOrderRefunded(store, walletStore, first, decimal.NewFromInt(100), decimal.Zero, "full"); err != nil {
+		t.Fatalf("buyer refund must succeed when the promoter wallet is empty: %v", err)
+	}
+	reloaded, err := store.GetProfileByID(profile.ID)
+	if err != nil || reloaded == nil || !reloaded.UnrecoveredCommission.Decimal.Equal(decimal.NewFromInt(20)) {
+		t.Fatalf("debt want 20, got %+v err %v", reloaded, err)
+	}
+	if otherAccount, err := walletStore.GetAccountByUserID(other.ID); err != nil || (otherAccount != nil && !otherAccount.Balance.Decimal.IsZero()) {
+		t.Fatalf("unrelated wallet changed: %+v err %v", otherAccount, err)
+	}
+
+	if err := svc.HandleOrderPaid(second.ID); err != nil {
+		t.Fatalf("offset commission: %v", err)
+	}
+	if err := svc.HandleOrderPaid(second.ID); err != nil {
+		t.Fatalf("repeat offset commission: %v", err)
+	}
+	reloaded, _ = store.GetProfileByID(profile.ID)
+	if reloaded == nil || !reloaded.UnrecoveredCommission.Decimal.IsZero() {
+		t.Fatalf("debt should be cleared by the next commission, got %+v", reloaded)
+	}
+	account, _ = walletStore.GetAccountByUserID(promoter.ID)
+	if account == nil || !account.Balance.Decimal.IsZero() {
+		t.Fatalf("offset commission must not pay the promoter again, balance %+v", account)
+	}
+	var credits int64
+	if err := db.Model(&walletdomain.Transaction{}).
+		Where("user_id = ? AND type = ?", promoter.ID, constants.WalletTxnTypeAffiliateCommission).
+		Count(&credits).Error; err != nil {
+		t.Fatalf("count credits: %v", err)
+	}
+	if credits != 1 {
+		t.Fatalf("wallet credits = %d, want the original commission only", credits)
+	}
+
+	if err := svc.HandleOrderPaid(third.ID); err != nil {
+		t.Fatalf("credit third commission: %v", err)
+	}
+	if err := svc.HandleOrderPaid(third.ID); err != nil {
+		t.Fatalf("repeat third commission: %v", err)
+	}
+	account, _ = walletStore.GetAccountByUserID(promoter.ID)
+	if account == nil || !account.Balance.Decimal.Equal(decimal.NewFromInt(20)) {
+		t.Fatalf("third commission should pay 20 after the debt is gone, got %+v", account)
+	}
+	if err := db.Model(&walletdomain.Transaction{}).
+		Where("user_id = ? AND type = ?", promoter.ID, constants.WalletTxnTypeAffiliateCommission).
+		Count(&credits).Error; err != nil {
+		t.Fatalf("count credits after third: %v", err)
+	}
+	if credits != 2 {
+		t.Fatalf("wallet credits = %d, want 2", credits)
+	}
+	if otherAccount, _ := walletStore.GetAccountByUserID(other.ID); otherAccount != nil && !otherAccount.Balance.Decimal.IsZero() {
+		t.Fatalf("unrelated wallet changed after later commissions: %+v", otherAccount)
+	}
+}
+
+type orderMapReader map[uint]*orderdomain.Order
+
+func (m orderMapReader) GetByID(id uint) (*orderdomain.Order, error) {
+	return m[id], nil
 }
 
 func paidOrder(total, walletPaid, onlinePaid int64, items []orderdomain.OrderItem) *orderdomain.Order {

@@ -55,6 +55,7 @@ func setupExchangeTest(t *testing.T) (*paymentapp.PaymentService, *gorm.DB) {
 		&walletdomain.RechargeOrder{},
 		&paymentdomain.PaymentChannel{},
 		&paymentdomain.Payment{},
+		&paymentdomain.ProviderClaim{},
 	); err != nil {
 		t.Fatalf("auto migrate failed: %v", err)
 	}
@@ -251,7 +252,7 @@ func TestCallbackRejectsMissingAmountForSuccess(t *testing.T) {
 	}
 }
 
-func TestCallbackRejectsMissingCurrencyForSuccess(t *testing.T) {
+func TestCallbackPinsMissingCurrencyToStoredPayment(t *testing.T) {
 	svc, db := setupExchangeTest(t)
 	payment, order := createExchangePaymentFixture(t, db,
 		decimal.NewFromInt(10), "USD",
@@ -260,25 +261,21 @@ func TestCallbackRejectsMissingCurrencyForSuccess(t *testing.T) {
 	)
 
 	now := time.Now()
-	_, err := svc.HandleCallback(paymentapp.PaymentCallbackInput{
+	updated, err := svc.HandleCallback(paymentapp.PaymentCallbackInput{
 		PaymentID:   payment.ID,
 		OrderNo:     order.OrderNo,
 		ChannelID:   payment.ChannelID,
 		Status:      constants.PaymentStatusSuccess,
 		ProviderRef: "REF-003",
 		Amount:      money.FromDecimal(decimal.RequireFromString("72")),
-		Currency:    "", // empty = skip check
+		Currency:    "",
 		PaidAt:      &now,
 	})
-	if err != paymentapp.ErrPaymentCurrencyMismatch {
-		t.Fatalf("callback without currency should fail with ErrPaymentCurrencyMismatch, got: %v", err)
+	if err != nil {
+		t.Fatalf("callback without a currency field should pin the stored payment currency: %v", err)
 	}
-	var stored paymentdomain.Payment
-	if err := db.First(&stored, payment.ID).Error; err != nil {
-		t.Fatalf("reload payment: %v", err)
-	}
-	if stored.Status == constants.PaymentStatusSuccess {
-		t.Fatalf("missing currency callback must not mark payment successful")
+	if updated.Status != constants.PaymentStatusSuccess || updated.Currency != "CNY" {
+		t.Fatalf("pinned callback = status %s currency %s", updated.Status, updated.Currency)
 	}
 }
 
