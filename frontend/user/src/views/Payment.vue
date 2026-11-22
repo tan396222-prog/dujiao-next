@@ -14,7 +14,7 @@
       </div>
 
       <!-- Loading Skeleton -->
-      <div v-if="loading" class="space-y-6">
+      <div v-if="paymentPageView === 'loading'" class="space-y-6">
         <div class="theme-float rounded-[22px] bg-card p-5 md:p-6 space-y-4">
           <div class="flex items-center justify-between gap-4">
             <div class="space-y-2">
@@ -37,7 +37,7 @@
         </div>
       </div>
 
-      <div v-else-if="showGuestAuthForm"
+      <div v-else-if="paymentPageView === 'guest-form'"
         class="theme-float rounded-[22px] bg-card p-5 md:p-6">
         <h2 class="mb-2 text-[17px] font-bold">{{ t('payment.guestAuthTitle') }}</h2>
         <p class="text-xs text-muted-foreground mb-4">{{ t('payment.guestAuthHint') }}</p>
@@ -58,7 +58,7 @@
       </div>
 
       <EmptyState
-        v-else-if="!order"
+        v-else-if="paymentPageView === 'empty'"
         icon="alert"
         :title="t('payment.orderNotFound')"
         :action-label="t('payment.backToOrders')"
@@ -529,7 +529,7 @@ const { t } = useI18n()
 const {
   loading, submitting, order, paymentResult, selectedChannelId, copied, walletAddressCopied,
   openedPayWindow, cachedPayment, guestAuth, guestAuthError, walletLoading, useBalance,
-  backLink, showGuestAuthForm, walletOnlyPayment, showBalanceOption, configReady, channels,
+  backLink, paymentPageView, walletOnlyPayment, showBalanceOption, configReady, channels,
   selectedChannel, selectedChannelName, cachedChannelName, resultChannelName, interactionLabel,
   paymentResultTitle, paymentGuideTitle, paymentGuideTip, showPayLink, showTelegramPayHint, payLinkOpenedTip,
   cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, qrUsingPayLinkFallback, showQRCode, qrImageUrl,
