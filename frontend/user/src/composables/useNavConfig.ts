@@ -1,7 +1,7 @@
 import { computed, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
-    Home, LayoutGrid, Newspaper, Bell, Info,
+    Home, LayoutGrid, Newspaper, Rss, Bell, Info,
     Link2, FileText, Globe, Star, Heart, MessageCircle, Gift, Zap, Shield,
     BookOpen, Code, Phone, MapPin, Music, Camera,
 } from 'lucide-vue-next'
@@ -46,6 +46,7 @@ interface NavConfigRaw {
 }
 
 const builtinNavDefs: Record<string, { path: string; label: string; icon: Component }> = {
+    ai_feed: { path: '/feed', label: 'nav.feed', icon: Rss },
     blog: { path: '/blog', label: 'nav.blog', icon: Newspaper },
     notice: { path: '/notice', label: 'nav.notice', icon: Bell },
     about: { path: '/about', label: 'nav.about', icon: Info },
@@ -91,7 +92,9 @@ export const useNavConfig = () => {
     const builtinNavItems = computed<NavItem[]>(() => {
         const builtin = navConfig.value?.builtin
         const result: NavItem[] = []
+        const aiFeedEnabled = appStore.config?.ai_feed_enabled !== false
         for (const [key, def] of Object.entries(builtinNavDefs)) {
+            if (key === 'ai_feed' && !aiFeedEnabled) continue
             if (builtin && builtin[key] === false) continue
             result.push({ key, path: def.path, label: t(def.label), icon: def.icon, type: 'route', target: '_self' })
         }

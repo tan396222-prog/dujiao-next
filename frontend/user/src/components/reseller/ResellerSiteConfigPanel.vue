@@ -85,6 +85,17 @@
             :hint="t('personalCenter.reseller.siteConfig.uploadHint')"
           />
         </div>
+        <ResellerImageField
+          v-model="form.wallpaper"
+          class="mt-4"
+          wide
+          cover
+          wallpaper
+          accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+          :label="t('personalCenter.reseller.siteConfig.fields.wallpaper')"
+          :hint="t('personalCenter.reseller.siteConfig.wallpaperHint')"
+          :remove-text="t('personalCenter.reseller.siteConfig.wallpaperRemove')"
+        />
       </section>
         </div>
 
@@ -493,6 +504,7 @@ const createBlankForm = (): ResellerSiteConfigPayload => ({
     site_name: '',
     logo: '',
     favicon: '',
+    wallpaper: '',
     announcement: {
         enabled: false,
         type: 'info',
@@ -547,6 +559,7 @@ const assignForm = (config?: ResellerSiteConfigData) => {
         next.site_name = config.site_name || ''
         next.logo = config.logo || ''
         next.favicon = config.favicon || ''
+        next.wallpaper = config.wallpaper || ''
         next.announcement = {
             enabled: config.announcement?.enabled === true,
             type: config.announcement?.type || 'info',

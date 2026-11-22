@@ -1,8 +1,10 @@
 package application
 
 import (
+	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dujiao-next/internal/constants"
 	walletcontract "github.com/dujiao-next/internal/modules/wallet/contract"
@@ -82,6 +84,79 @@ func (s *Service) CreditInTransaction(
 		return nil, nil, walletcontract.ErrTransactionCreateFailed
 	}
 	return account, transaction, nil
+}
+
+// DebitUpTo 在调用方已经打开的事务里扣减余额，最多扣到 0。
+// 同一 reference 重复调用返回已经扣过的金额，不会再次扣款。
+func DebitUpTo(repository walletcontract.Repository, input walletcontract.CreditInput) (decimal.Decimal, error) {
+	if repository == nil {
+		return decimal.Zero, walletcontract.ErrTransactionRequired
+	}
+	amount := input.Amount.Decimal.Round(2)
+	if amount.LessThanOrEqual(decimal.Zero) || input.UserID == 0 {
+		return decimal.Zero, nil
+	}
+	reference := strings.TrimSpace(input.Reference)
+	if reference == "" {
+		return decimal.Zero, walletcontract.ErrTransactionCreateFailed
+	}
+	existing, err := repository.GetTransactionByReference(reference)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	if existing != nil {
+		return existing.Amount.Decimal.Round(2), nil
+	}
+
+	now := time.Now()
+	account, err := ensureAccountForUpdate(repository, input.UserID, now)
+	if err != nil {
+		return decimal.Zero, err
+	}
+	before := account.Balance.Decimal.Round(2)
+	debit := amount
+	if before.LessThanOrEqual(decimal.Zero) {
+		debit = decimal.Zero
+	} else if debit.GreaterThan(before) {
+		debit = before
+	}
+	after := before.Sub(debit).Round(2)
+	if debit.GreaterThan(decimal.Zero) {
+		account.Balance = money.FromDecimal(after)
+		account.UpdatedAt = now
+		if err := repository.UpdateAccount(account); err != nil {
+			return decimal.Zero, walletcontract.ErrAccountUpdateFailed
+		}
+	}
+	transactionType := strings.TrimSpace(input.Type)
+	if transactionType == "" {
+		transactionType = constants.WalletTxnTypeAdminAdjust
+	}
+	remark := cleanRemark(input.Remark, "余额扣回")
+	if debit.LessThan(amount) {
+		remark = clipWalletRemark(fmt.Sprintf("%s requested=%s recovered=%s shortfall=%s", remark, amount.StringFixed(2), debit.StringFixed(2), amount.Sub(debit).StringFixed(2)))
+	}
+	transaction := &walletdomain.Transaction{
+		UserID: input.UserID, OrderID: input.OrderID,
+		Type: transactionType, Direction: constants.WalletTxnDirectionOut,
+		Amount: money.FromDecimal(debit), BalanceBefore: money.FromDecimal(before),
+		BalanceAfter: money.FromDecimal(after), Currency: normalizeCurrency(input.Currency),
+		Reference: reference, Remark: remark,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := repository.CreateTransaction(transaction); err != nil {
+		return decimal.Zero, walletcontract.ErrTransactionCreateFailed
+	}
+	return debit, nil
+}
+
+func clipWalletRemark(value string) string {
+	value = strings.TrimSpace(value)
+	if utf8.RuneCountInString(value) <= 255 {
+		return value
+	}
+	runes := []rune(value)
+	return string(runes[:255])
 }
 
 func (s *Service) changeBalance(

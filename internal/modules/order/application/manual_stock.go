@@ -7,9 +7,24 @@ import (
 	orderdomain "github.com/dujiao-next/internal/modules/order/domain"
 
 	productcontract "github.com/dujiao-next/internal/modules/catalog/product/contract"
+	productdomain "github.com/dujiao-next/internal/modules/catalog/product/domain"
 
 	"github.com/dujiao-next/internal/constants"
 )
+
+// manualLineNeedsPresale 判断人工库存是否不够锁定。不够时允许下单，但不占用库存。
+func manualLineNeedsPresale(product *productdomain.Product, sku *productdomain.ProductSKU, quantity int) bool {
+	if product != nil && product.CouponSale {
+		return false
+	}
+	if sku == nil || quantity <= 0 {
+		return false
+	}
+	if !productdomain.ShouldEnforceManualSKUStock(product, sku) {
+		return false
+	}
+	return productdomain.ManualSKUAvailable(sku) < quantity
+}
 
 type manualStockSummary struct {
 	BySKU           map[uint]int
@@ -24,6 +39,9 @@ func summarizeManualStockItems(items []orderdomain.OrderItem) manualStockSummary
 		ByLegacyProduct: make(map[uint]int),
 	}
 	for _, item := range items {
+		if item.IsPresale() {
+			continue
+		}
 		if strings.TrimSpace(item.FulfillmentType) != constants.FulfillmentTypeManual {
 			continue
 		}

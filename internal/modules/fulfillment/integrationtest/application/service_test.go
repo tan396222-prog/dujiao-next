@@ -237,3 +237,78 @@ func TestFulfillmentRejectedWhenRefundCommitsBeforeDeliveryTransaction(t *testin
 		})
 	}
 }
+
+func TestPresaleRestockDeliversOnce(t *testing.T) {
+	db := setupFulfillmentServiceTestDB(t)
+	now := time.Now()
+	ten := money.FromDecimal(decimal.NewFromInt(10))
+	order := &orderdomain.Order{
+		OrderNo: "PRESALE-ONCE", UserID: 1, Status: constants.OrderStatusPaid, Currency: "CNY",
+		OriginalAmount: ten, TotalAmount: ten, OnlinePaidAmount: ten, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(order).Error; err != nil {
+		t.Fatalf("create order failed: %v", err)
+	}
+	item := &orderdomain.OrderItem{
+		OrderID: order.ID, ProductID: 100, SKUID: 1001, TitleJSON: jsonmap.JSON{"zh-CN": "预售"},
+		UnitPrice: ten, Quantity: 1, TotalPrice: ten, FulfillmentType: constants.FulfillmentTypeAuto,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	item.MarkPresale()
+	if err := db.Create(item).Error; err != nil {
+		t.Fatalf("create item failed: %v", err)
+	}
+	svc := New(Options{
+		OrderStore:       ordergormstore.New(db, "test-guest-credential-secret-with-32-bytes"),
+		FulfillmentStore: fulfillmentgormstore.New(db),
+	})
+	if _, err := svc.CreateAuto(order.ID); !errors.Is(err, ErrCardSecretInsufficient) {
+		t.Fatalf("empty stock want ErrCardSecretInsufficient, got %v", err)
+	}
+	var waiting orderdomain.Order
+	if err := db.First(&waiting, order.ID).Error; err != nil {
+		t.Fatalf("reload waiting order failed: %v", err)
+	}
+	if waiting.Status != constants.OrderStatusPaid {
+		t.Fatalf("presale order must stay paid while stock is empty, got %s", waiting.Status)
+	}
+
+	first := &cardsecretdomain.Secret{
+		ProductID: 100, SKUID: 1001, Secret: "PRESALE-SECRET-1", Status: cardsecretdomain.StatusAvailable,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(first).Error; err != nil {
+		t.Fatalf("restock failed: %v", err)
+	}
+	delivered, err := svc.CreateAuto(order.ID)
+	if err != nil {
+		t.Fatalf("restock delivery failed: %v", err)
+	}
+	if delivered == nil || !strings.Contains(delivered.Payload, "PRESALE-SECRET-1") {
+		t.Fatalf("payload = %+v", delivered)
+	}
+	extra := &cardsecretdomain.Secret{
+		ProductID: 100, SKUID: 1001, Secret: "PRESALE-SECRET-2", Status: cardsecretdomain.StatusAvailable,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(extra).Error; err != nil {
+		t.Fatalf("create extra secret failed: %v", err)
+	}
+	if _, err := svc.CreateAuto(order.ID); !errors.Is(err, ErrOrderStatusInvalid) {
+		t.Fatalf("repeat delivery want ErrOrderStatusInvalid, got %v", err)
+	}
+	var extraAfter cardsecretdomain.Secret
+	if err := db.First(&extraAfter, extra.ID).Error; err != nil {
+		t.Fatalf("reload extra secret failed: %v", err)
+	}
+	if extraAfter.Status != cardsecretdomain.StatusAvailable {
+		t.Fatalf("extra secret was consumed by a repeated presale task, status %s", extraAfter.Status)
+	}
+	var count int64
+	if err := db.Model(&fulfillmentdomain.Fulfillment{}).Where("order_id = ?", order.ID).Count(&count).Error; err != nil {
+		t.Fatalf("count fulfillments failed: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("fulfillment count = %d, want 1", count)
+	}
+}

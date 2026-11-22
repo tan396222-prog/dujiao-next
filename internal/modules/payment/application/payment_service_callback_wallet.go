@@ -40,7 +40,11 @@ func (s *PaymentService) handleWalletRechargeCallback(payment *paymentdomain.Pay
 	}
 
 	now := time.Now()
-	updated, newlySucceeded, err := s.applyWalletRechargePaymentUpdate(payment, status, input, now)
+	scope := ""
+	if status == constants.PaymentStatusSuccess {
+		scope = s.providerClaimScope(payment)
+	}
+	updated, newlySucceeded, err := s.applyWalletRechargePaymentUpdate(payment, status, scope, input, now)
 	if err != nil {
 		log.Errorw("wallet_recharge_callback_apply_failed", "error", err)
 		return nil, err
@@ -80,7 +84,7 @@ func validateWalletCallbackPaymentFacts(payment *paymentdomain.Payment, recharge
 	return validateCallbackPaymentFacts(payment, rechargeNo, status, input)
 }
 
-func (s *PaymentService) applyWalletRechargePaymentUpdate(payment *paymentdomain.Payment, status string, input PaymentCallbackInput, now time.Time) (*paymentdomain.Payment, bool, error) {
+func (s *PaymentService) applyWalletRechargePaymentUpdate(payment *paymentdomain.Payment, status, scope string, input PaymentCallbackInput, now time.Time) (*paymentdomain.Payment, bool, error) {
 	paymentVal := payment
 	newlySucceeded := false
 
@@ -111,6 +115,9 @@ func (s *PaymentService) applyWalletRechargePaymentUpdate(payment *paymentdomain
 			return walletcontract.ErrRechargeNotFound
 		}
 		if err := validateWalletCallbackPaymentFacts(lockedPayment, recharge.RechargeNo, status, input); err != nil {
+			return err
+		}
+		if err := bindSuccessfulProviderClaim(paymentRepo, lockedPayment, scope, status, input); err != nil {
 			return err
 		}
 		if input.manualConfirm && recharge.Status != constants.WalletRechargeStatusPending &&

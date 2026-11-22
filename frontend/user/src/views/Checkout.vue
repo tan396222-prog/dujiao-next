@@ -1,5 +1,6 @@
 <template>
   <div class="min-h-screen bg-background pb-16 pt-24 text-foreground">
+    <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
     <div class="container mx-auto px-4">
       <div class="mb-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         <div>
@@ -271,6 +272,7 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { useCheckout } from '../composables/useCheckout'
+import PaymentProtectionDialog from '../components/payment/PaymentProtectionDialog.vue'
 
 const { t } = useI18n()
 
@@ -294,6 +296,7 @@ const {
   requiresOnlineChannel, paymentChannels, selectedChannelId, isChannelDisabledForAmount, channelAmountLimitHint,
   handleSelectChannel, formatChannelFeeRate, formatChannelFixedFee,
   submitting, canSubmit, handleSubmit,
+  protectionOpen, protectionStep, protectionTotal, protectionError, cancelProtection, retryProtection,
 } = useCheckout()
 
 // 这两个引用仅通过模板字符串 ref 绑定（刷新/重置逻辑在 composable 内），

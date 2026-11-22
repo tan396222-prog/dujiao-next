@@ -1,6 +1,7 @@
 package application
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -107,7 +108,12 @@ func (s *PaymentService) HandleCallback(input PaymentCallbackInput) (*paymentdom
 
 	// 幂等处理：已成功的不再回退状态。
 	// 人工确认需要继续进入事务，由 applyPaymentUpdate 在锁内判断订单是否仍需恢复。
+	// 重放成功通知时仍要占用外部交易号，避免它随后被另一笔订单使用。
 	if payment.Status == constants.PaymentStatusSuccess && !input.manualConfirm {
+		if err := s.claimRecordedProviderRef(payment, status, s.providerClaimScope(payment), input); err != nil {
+			log.Warnw("payment_callback_provider_ref_rejected", "error", err)
+			return nil, err
+		}
 		log.Infow("payment_callback_idempotent_success",
 			"current_status", payment.Status,
 		)
@@ -122,7 +128,11 @@ func (s *PaymentService) HandleCallback(input PaymentCallbackInput) (*paymentdom
 
 	previousStatus := payment.Status
 	now := time.Now()
-	updated, processedOrder, orderPaid, err := s.applyPaymentUpdate(payment, order, status, input, now)
+	scope := ""
+	if status == constants.PaymentStatusSuccess {
+		scope = s.providerClaimScope(payment)
+	}
+	updated, processedOrder, orderPaid, err := s.applyPaymentUpdate(payment, order, status, scope, input, now)
 	if err != nil {
 		log.Errorw("payment_callback_apply_failed",
 			"order_id", order.ID,
@@ -156,24 +166,37 @@ func validateCallbackPaymentFacts(payment *paymentdomain.Payment, businessOrderN
 	if !matchesBusinessOrderNo(input.OrderNo, businessOrderNo, payment) {
 		return ErrPaymentInvalid
 	}
-	currency := strings.TrimSpace(input.Currency)
+	callbackCurrency := strings.TrimSpace(input.Currency)
+	if status == constants.PaymentStatusSuccess && callbackCurrency == "" {
+		// 易支付等通知没有币种字段。验签通过后只采用这笔支付创建时保存的币种。
+		callbackCurrency = strings.TrimSpace(payment.Currency)
+	}
 	if status == constants.PaymentStatusSuccess {
-		if currency == "" {
+		if callbackCurrency == "" {
 			return ErrPaymentCurrencyMismatch
 		}
-		if !input.Amount.Decimal.IsPositive() {
+		if !exactPaymentAmount(input.Amount.Decimal, payment.Amount.Decimal) {
 			return ErrPaymentAmountMismatch
 		}
 	}
-	if currency != "" &&
-		!strings.EqualFold(currency, strings.TrimSpace(payment.Currency)) &&
+	if strings.TrimSpace(input.Currency) != "" &&
+		!strings.EqualFold(strings.TrimSpace(input.Currency), strings.TrimSpace(payment.Currency)) &&
 		!canAdoptVerifiedLegacyDujiaoPayCurrency(payment, status, input) {
 		return ErrPaymentCurrencyMismatch
 	}
-	if !input.Amount.Decimal.IsZero() && input.Amount.Decimal.Cmp(payment.Amount.Decimal) != 0 {
+	if status != constants.PaymentStatusSuccess && !input.Amount.Decimal.IsZero() && !exactPaymentAmount(input.Amount.Decimal, payment.Amount.Decimal) {
 		return ErrPaymentAmountMismatch
 	}
 	return nil
+}
+
+// exactPaymentAmount 要求两边都是精确到分的金额，并且数值相等。
+// 签名正确也不能把 10.00 接受成 10.001 或把“分”当成“元”。
+func exactPaymentAmount(got, want decimal.Decimal) bool {
+	if !got.Equal(got.Round(2)) || !want.Equal(want.Round(2)) {
+		return false
+	}
+	return got.IsPositive() && got.Equal(want)
 }
 
 // canAdoptVerifiedLegacyDujiaoPayCurrency 只接受已经通过 DujiaoPay webhook
@@ -247,7 +270,7 @@ func updateCallbackMetaWithRepo(repo paymentcontract.Store, payment *paymentdoma
 	return payment, nil
 }
 
-func (s *PaymentService) applyPaymentUpdate(payment *paymentdomain.Payment, order *orderdomain.Order, status string, input PaymentCallbackInput, now time.Time) (*paymentdomain.Payment, *orderdomain.Order, bool, error) {
+func (s *PaymentService) applyPaymentUpdate(payment *paymentdomain.Payment, order *orderdomain.Order, status, scope string, input PaymentCallbackInput, now time.Time) (*paymentdomain.Payment, *orderdomain.Order, bool, error) {
 	returnVal := payment
 	processedOrder := order
 	orderPaid := false
@@ -270,6 +293,9 @@ func (s *PaymentService) applyPaymentUpdate(payment *paymentdomain.Payment, orde
 			return ErrPaymentNotFound
 		}
 		if err := validateCallbackPaymentFacts(lockedPayment, lockedOrder.OrderNo, status, input); err != nil {
+			return err
+		}
+		if err := bindSuccessfulProviderClaim(paymentRepo, lockedPayment, scope, status, input); err != nil {
 			return err
 		}
 		adoptVerifiedLegacyDujiaoPayCurrency(lockedPayment, status, input)
@@ -540,6 +566,98 @@ func (s *PaymentService) markOrderPaid(tx paymentcontract.Transaction, order *or
 
 	if err := orderapp.ConsumeManualStockByItems(productRepo, productSKURepo, order.Items); err != nil {
 		return err
+	}
+	return nil
+}
+
+func (s *PaymentService) providerClaimScope(payment *paymentdomain.Payment) string {
+	if payment == nil {
+		return ""
+	}
+	provider := payment.ProviderType
+	var config jsonmap.JSON
+	channelID := payment.ChannelID
+	if s != nil && s.channelRepo != nil && channelID != 0 {
+		channel, err := s.channelRepo.GetByID(channelID)
+		if err == nil && channel != nil {
+			if strings.TrimSpace(channel.ProviderType) != "" {
+				provider = channel.ProviderType
+			}
+			config = channel.ConfigJSON
+			channelID = channel.ID
+		}
+	}
+	return paymentdomain.ProviderClaimScope(provider, config, channelID)
+}
+
+func (s *PaymentService) claimRecordedProviderRef(payment *paymentdomain.Payment, status, scope string, input PaymentCallbackInput) error {
+	if s == nil || s.paymentRepo == nil || status != constants.PaymentStatusSuccess {
+		return nil
+	}
+	return s.paymentRepo.WithinTransaction(func(tx paymentcontract.Transaction) error {
+		locked, err := tx.Payments().GetByIDForUpdate(payment.ID)
+		if err != nil {
+			return ErrPaymentUpdateFailed
+		}
+		if locked == nil {
+			return ErrPaymentNotFound
+		}
+		return bindSuccessfulProviderClaim(tx.Payments(), locked, scope, status, input)
+	})
+}
+
+// bindSuccessfulProviderClaim 在当前事务里原子占用外部交易号。
+// 成功通知没有交易号时拒绝；人工确认可以没有交易号。同一笔支付重放则直接通过。
+func bindSuccessfulProviderClaim(repo paymentcontract.Store, payment *paymentdomain.Payment, scope, status string, input PaymentCallbackInput) error {
+	if status != constants.PaymentStatusSuccess || payment == nil {
+		return nil
+	}
+	ref := strings.TrimSpace(input.ProviderRef)
+	if ref == "" {
+		ref = strings.TrimSpace(payment.ProviderRef)
+	}
+	if ref == "" {
+		if input.manualConfirm || payment.Status == constants.PaymentStatusSuccess {
+			return nil
+		}
+		return ErrPaymentProviderRefRequired
+	}
+	if len(ref) > 191 || len(scope) > 191 || scope == "" {
+		return ErrPaymentInvalid
+	}
+	existing, err := repo.GetProviderClaimForUpdate(scope, ref)
+	if err != nil {
+		return ErrPaymentUpdateFailed
+	}
+	if existing != nil {
+		if existing.PaymentID == payment.ID {
+			return nil
+		}
+		return ErrPaymentProviderRefRejected
+	}
+	claim := &paymentdomain.ProviderClaim{
+		ScopeKey:    scope,
+		ProviderRef: ref,
+		PaymentID:   payment.ID,
+		OrderID:     payment.OrderID,
+		ChannelID:   payment.ChannelID,
+		CreatedAt:   time.Now(),
+	}
+	if err := repo.CreateProviderClaim(claim); err != nil {
+		if errors.Is(err, paymentcontract.ErrProviderClaimConflict) {
+			existing, readErr := repo.GetProviderClaimForUpdate(scope, ref)
+			if readErr != nil {
+				return ErrPaymentUpdateFailed
+			}
+			if existing != nil && existing.PaymentID == payment.ID {
+				return nil
+			}
+			return ErrPaymentProviderRefRejected
+		}
+		return ErrPaymentUpdateFailed
+	}
+	if strings.TrimSpace(payment.ProviderRef) == "" {
+		payment.ProviderRef = ref
 	}
 	return nil
 }

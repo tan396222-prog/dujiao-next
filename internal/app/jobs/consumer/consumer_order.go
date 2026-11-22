@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/htmltext"
@@ -16,10 +17,12 @@ import (
 	"github.com/dujiao-next/internal/telegramidentity"
 	"github.com/hibiken/asynq"
 
+	couponapp "github.com/dujiao-next/internal/modules/coupon/application"
 	fulfillmentapp "github.com/dujiao-next/internal/modules/fulfillment/application"
 	fulfillmentdomain "github.com/dujiao-next/internal/modules/fulfillment/domain"
 	notificationcontract "github.com/dujiao-next/internal/modules/notification/contract"
 	orderapp "github.com/dujiao-next/internal/modules/order/application"
+	ordercontract "github.com/dujiao-next/internal/modules/order/contract"
 	orderdomain "github.com/dujiao-next/internal/modules/order/domain"
 	paymentapp "github.com/dujiao-next/internal/modules/payment/application"
 	settingsmessaging "github.com/dujiao-next/internal/modules/settings/schema/messaging"
@@ -328,6 +331,15 @@ func (c *Consumer) handleOrderAutoFulfill(_ context.Context, task *asynq.Task) e
 		logger.Debugw("worker_order_auto_fulfill_skip_invalid_payload", "order_id", payload.OrderID)
 		return nil
 	}
+	if c.OrderStore != nil {
+		order, err := c.OrderStore.GetByID(payload.OrderID)
+		if err != nil {
+			return err
+		}
+		if order != nil && order.IsCouponSaleOrder() {
+			return c.deliverCouponSale(order)
+		}
+	}
 	_, err := c.FulfillmentService.CreateAuto(payload.OrderID)
 	if err != nil {
 		switch {
@@ -337,6 +349,13 @@ func (c *Consumer) handleOrderAutoFulfill(_ context.Context, task *asynq.Task) e
 		case errors.Is(err, fulfillmentapp.ErrFulfillmentNotAuto):
 			logger.Debugw("worker_order_auto_fulfill_skip_not_auto", "order_id", payload.OrderID)
 			return nil
+		case errors.Is(err, fulfillmentapp.ErrCardSecretInsufficient):
+			if c.schedulePresaleAutoFulfill(payload.OrderID) {
+				logger.Infow("worker_order_auto_fulfill_wait_restock", "order_id", payload.OrderID)
+				return nil
+			}
+			logger.Warnw("worker_order_auto_fulfill_failed", "order_id", payload.OrderID, "error", err)
+			return err
 		case errors.Is(err, orderapp.ErrOrderStatusInvalid):
 			logger.Debugw("worker_order_auto_fulfill_skip_invalid_status", "order_id", payload.OrderID)
 			return nil
@@ -346,6 +365,126 @@ func (c *Consumer) handleOrderAutoFulfill(_ context.Context, task *asynq.Task) e
 		default:
 			logger.Warnw("worker_order_auto_fulfill_failed", "order_id", payload.OrderID, "error", err)
 			return err
+		}
+	}
+	return nil
+}
+
+// schedulePresaleAutoFulfill 给已标记预售、但卡密还不够的自动发货订单预约下一次交付。
+// 支付时的自动交付只重试几次；到货可能晚得多，所以这里单独排队，避免提前写成已交付。
+func (c *Consumer) schedulePresaleAutoFulfill(orderID uint) bool {
+	if c == nil || c.OrderStore == nil || c.QueueClient == nil || orderID == 0 {
+		return false
+	}
+	order, err := c.OrderStore.GetByID(orderID)
+	if err != nil || order == nil || !orderWaitsForAutoRestock(order) {
+		return false
+	}
+	err = c.QueueClient.EnqueueOrderAutoFulfill(
+		queue.OrderAutoFulfillPayload{OrderID: orderID},
+		asynq.ProcessIn(5*time.Minute),
+		asynq.MaxRetry(0),
+		asynq.TaskID(fmt.Sprintf("presale-auto-fulfill:%d:%d", orderID, time.Now().Unix()/60)),
+	)
+	return err == nil || errors.Is(err, asynq.ErrTaskIDConflict) || errors.Is(err, asynq.ErrDuplicateTask)
+}
+
+func orderWaitsForAutoRestock(order *orderdomain.Order) bool {
+	if order == nil {
+		return false
+	}
+	for _, item := range order.Items {
+		if item.IsPresale() && strings.TrimSpace(item.FulfillmentType) == constants.FulfillmentTypeAuto {
+			return true
+		}
+	}
+	return false
+}
+
+// deliverCouponSale 为已支付的售券订单生成一次性九折券，并把券码写入交付内容。
+// 券码由订单项和序号决定，重复回调不会多发。库存卡密不参与这条路径。
+func (c *Consumer) deliverCouponSale(order *orderdomain.Order) error {
+	if c == nil || c.Container == nil || c.OrderStore == nil || order == nil || order.ID == 0 {
+		return nil
+	}
+	switch order.Status {
+	case constants.OrderStatusPaid, constants.OrderStatusFulfilling, constants.OrderStatusPartiallyRefunded:
+	default:
+		return nil
+	}
+	issuer := couponapp.NewService(c.CouponRepo, c.CouponUsageRepo)
+	err := c.OrderStore.WithinTransaction(func(tx ordercontract.Transaction) error {
+		locked, err := tx.Orders().GetByIDForUpdateWithChildren(order.ID)
+		if err != nil {
+			return err
+		}
+		if locked == nil {
+			return nil
+		}
+		switch locked.Status {
+		case constants.OrderStatusPaid, constants.OrderStatusFulfilling, constants.OrderStatusPartiallyRefunded:
+		default:
+			return nil
+		}
+		if _, found, err := tx.Fulfillments().FindByOrderIDForUpdate(order.ID); err != nil {
+			return err
+		} else if found {
+			return nil
+		}
+		codes := make([]string, 0, len(locked.Items))
+		for _, item := range locked.Items {
+			if !item.IsCouponSale() {
+				continue
+			}
+			quantity := item.Quantity
+			if quantity <= 0 {
+				quantity = 1
+			}
+			for sequence := 1; sequence <= quantity; sequence++ {
+				code, err := issuer.EnsureSaleCoupon(tx.Coupons(), item.ID, sequence)
+				if err != nil {
+					return err
+				}
+				coupon, err := tx.Coupons().GetByCode(code)
+				if err != nil {
+					return err
+				}
+				if coupon == nil || !coupon.IsActive {
+					continue
+				}
+				codes = append(codes, code)
+			}
+		}
+		if len(codes) == 0 {
+			return nil
+		}
+		now := time.Now()
+		fulfillment := &fulfillmentdomain.Fulfillment{
+			OrderID:     order.ID,
+			Type:        constants.FulfillmentTypeCoupon,
+			Status:      constants.FulfillmentStatusDelivered,
+			Payload:     strings.Join(codes, "\n"),
+			DeliveredAt: &now,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		if err := tx.Fulfillments().Create(fulfillment); err != nil {
+			return err
+		}
+		if locked.Status == constants.OrderStatusPartiallyRefunded {
+			return nil
+		}
+		return tx.Orders().UpdateFields(order.ID, map[string]interface{}{
+			"status":     constants.OrderStatusCompleted,
+			"updated_at": now,
+		})
+	})
+	if err != nil {
+		return err
+	}
+	if order.ParentID != nil {
+		if _, syncErr := orderapp.SyncParentStatus(c.OrderStore, *order.ParentID, time.Now()); syncErr != nil {
+			return syncErr
 		}
 	}
 	return nil

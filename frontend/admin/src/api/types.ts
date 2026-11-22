@@ -75,6 +75,7 @@ export interface AdminProduct {
   manual_stock_sold: number
   payment_channel_ids: string
   is_affiliate_enabled: boolean
+  coupon_sale?: boolean
   auto_stock_available: number
   auto_stock_total: number
   auto_stock_locked: number
@@ -901,6 +902,7 @@ export interface AdminResellerSiteConfigPayload {
   site_name?: string
   logo?: string
   favicon?: string
+  wallpaper?: string
   announcement?: {
     enabled?: boolean
     type?: string
@@ -939,6 +941,7 @@ export interface AdminResellerSiteConfig extends Required<Pick<AdminResellerSite
   site_name: string
   logo: string
   favicon: string
+  wallpaper: string
   footer_links: Array<{
     name?: AdminResellerLocalizedText
     url?: string

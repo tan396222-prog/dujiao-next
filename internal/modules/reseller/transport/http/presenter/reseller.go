@@ -97,6 +97,7 @@ type ResellerSiteConfigResp struct {
 	SiteName     string        `json:"site_name"`
 	Logo         string        `json:"logo"`
 	Favicon      string        `json:"favicon"`
+	Wallpaper    string        `json:"wallpaper"`
 	Announcement jsonmap.JSON  `json:"announcement"`
 	Support      jsonmap.JSON  `json:"support"`
 	SEO          jsonmap.JSON  `json:"seo"`
@@ -131,6 +132,7 @@ type AdminResellerSiteConfigResp struct {
 	SiteName     string                            `json:"site_name"`
 	Logo         string                            `json:"logo"`
 	Favicon      string                            `json:"favicon"`
+	Wallpaper    string                            `json:"wallpaper"`
 	Announcement jsonmap.JSON                      `json:"announcement"`
 	Support      jsonmap.JSON                      `json:"support"`
 	SEO          jsonmap.JSON                      `json:"seo"`
@@ -303,6 +305,7 @@ func NewResellerSiteConfigResp(row *resellerdomain.SiteConfig) *ResellerSiteConf
 		SiteName:     row.SiteName,
 		Logo:         row.Logo,
 		Favicon:      row.Favicon,
+		Wallpaper:    row.Wallpaper,
 		Announcement: row.AnnouncementJSON,
 		Support:      row.SupportJSON,
 		SEO:          row.SEOJSON,
@@ -363,6 +366,7 @@ func NewAdminResellerSiteConfigResp(row *resellerdomain.SiteConfig) AdminReselle
 		SiteName:     row.SiteName,
 		Logo:         row.Logo,
 		Favicon:      row.Favicon,
+		Wallpaper:    row.Wallpaper,
 		Announcement: row.AnnouncementJSON,
 		Support:      row.SupportJSON,
 		SEO:          row.SEOJSON,

@@ -52,6 +52,7 @@ func newManualConfirmFixture(t *testing.T, orderStatus string, autoQuantity int)
 		&fulfillmentdomain.Fulfillment{},
 		&paymentdomain.PaymentChannel{},
 		&paymentdomain.Payment{},
+		&paymentdomain.ProviderClaim{},
 		&cardsecretdomain.Batch{},
 		&cardsecretdomain.Secret{},
 		&coupondomain.Coupon{},

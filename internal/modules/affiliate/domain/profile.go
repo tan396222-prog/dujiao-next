@@ -5,6 +5,7 @@ import (
 	"time"
 
 	userdomain "github.com/dujiao-next/internal/modules/identity/user/domain"
+	"github.com/dujiao-next/internal/shared/money"
 )
 
 // NormalizeCode 归一化外部输入的推广码，并限制为持久化字段允许的长度。
@@ -21,13 +22,14 @@ func NormalizeCode(raw string) string {
 
 // Profile 推广返利用户档案
 type Profile struct {
-	ID            uint       `gorm:"primarykey" json:"id"`                              // 主键
-	UserID        uint       `gorm:"not null;uniqueIndex" json:"user_id"`               // 用户ID
-	AffiliateCode string     `gorm:"type:varchar(32);not null;uniqueIndex" json:"code"` // 联盟短ID
-	Status        string     `gorm:"type:varchar(20);not null;index" json:"status"`     // 状态
-	CreatedAt     time.Time  `gorm:"index" json:"created_at"`                           // 创建时间
-	UpdatedAt     time.Time  `gorm:"index" json:"updated_at"`                           // 更新时间
-	DeletedAt     *time.Time `gorm:"index" json:"-"`                                    // 软删除时间
+	ID                    uint         `gorm:"primarykey" json:"id"`                                                // 主键
+	UserID                uint         `gorm:"not null;uniqueIndex" json:"user_id"`                                 // 用户ID
+	AffiliateCode         string       `gorm:"type:varchar(32);not null;uniqueIndex" json:"code"`                   // 联盟短ID
+	Status                string       `gorm:"type:varchar(20);not null;index" json:"status"`                       // 状态
+	UnrecoveredCommission money.Amount `gorm:"type:decimal(20,2);not null;default:0" json:"unrecovered_commission"` // 退款时余额不够、等待以后佣金抵扣的金额
+	CreatedAt             time.Time    `gorm:"index" json:"created_at"`                                             // 创建时间
+	UpdatedAt             time.Time    `gorm:"index" json:"updated_at"`                                             // 更新时间
+	DeletedAt             *time.Time   `gorm:"index" json:"-"`                                                      // 软删除时间
 
 	User userdomain.User `gorm:"foreignKey:UserID" json:"user,omitempty"` // 用户信息
 }

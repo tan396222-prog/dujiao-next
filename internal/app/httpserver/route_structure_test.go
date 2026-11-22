@@ -147,6 +147,7 @@ func TestRouteDomainFilesPreserveTrustBoundaries(t *testing.T) {
 				`cardsecrettransport.RegisterAdminRoutes(authorized, adminCardSecretHandler)`,
 				`giftcardtransport.RegisterAdminRoutes(authorized, adminGiftCardHandler)`,
 				`settingstransport.RegisterAdminRoutes(authorized, adminSettingsHandler)`,
+				`orderrisktransport.RegisterAdminRoutes(authorized, orderrisktransport.NewAdminHandler(c.OrderRiskControlService))`,
 				`settingstransport.RegisterAdminSMTPRoutes(authorized,`,
 				`settingstransport.RegisterAdminCaptchaRoutes(authorized,`,
 				`settingstransport.RegisterAdminTelegramAuthRoutes(authorized,`,

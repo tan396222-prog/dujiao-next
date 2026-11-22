@@ -2,6 +2,7 @@ import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
 import { amountToCents, centsToAmount } from '../utils/money'
+import { allowsBackorder, resolveStockTier, stockTierMessageKey } from '../utils/publicStock'
 import { resolveCardDisplayPrice, resolveMemberPriceAmount } from '../utils/productPricing'
 import { useUserAuthStore } from '../stores/userAuth'
 import { useUserProfileStore } from '../stores/userProfile'
@@ -68,25 +69,12 @@ export function useProductLabels() {
     }
   }
 
-  const getStockStatusLabel = (product: any) => {
-    const status = product?.stock_status || ''
-    if (status === 'unlimited') return t('products.stockStatus.unlimited')
-    if (status === 'out_of_stock') return t('products.stockStatus.outOfStock')
-    if (status === 'low_stock') {
-      const quantityHidden = product?.stock_quantity_hidden === true || String(product?.stock_display_mode || '').trim() !== 'exact'
-      if (quantityHidden) {
-        return t('products.stockStatus.lowStock')
-      }
-      const count = Number(product?.fulfillment_type === 'manual' ? product?.manual_stock_available : product?.auto_stock_available)
-      if (Number.isFinite(count) && count > 0) {
-        return t('products.stockStatus.lowStockCount', { count })
-      }
-      return t('products.stockStatus.lowStock')
-    }
-    return t('products.stockStatus.inStock')
-  }
+  const getStockStatusLabel = (product: any) => t(stockTierMessageKey(resolveStockTier(product)))
 
-  const isSoldOut = (product: any) => Boolean(product?.is_sold_out || product?.stock_status === 'out_of_stock')
+  const isSoldOut = (product: any) => {
+    if (allowsBackorder(product)) return false
+    return Boolean(product?.is_sold_out || product?.stock_status === 'out_of_stock')
+  }
 
   const parsePriceAmount = (amount: any) => amountToCents(amount)
 

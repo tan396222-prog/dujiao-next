@@ -56,6 +56,7 @@
               {{ getPurchaseTypeLabel(product.purchase_type) }}
             </span>
           </div>
+          <p v-if="showPresaleNotice" class="mb-3 text-xs font-medium text-warning">{{ t('products.presaleNotice') }}</p>
 
           <div v-if="product.tags && product.tags.length" class="mb-1 flex flex-wrap gap-1.5">
             <span v-for="(tag, i) in product.tags" :key="i" class="inline-flex items-center rounded-full bg-secondary px-2.5 py-1 text-[12.5px] font-semibold text-muted-foreground">{{ tag }}</span>
@@ -293,7 +294,7 @@ const {
   showSelectedSkuMemberBadge,
   isSkuPurchasable, skuDisplayText, skuStockText,
   quantityEffectiveLimit, quantityEffectiveMin, handleQuantityInput,
-  requiresLogin, requiresSKUSelection, canPurchase, cannotPurchaseReason,
+  requiresLogin, requiresSKUSelection, canPurchase, cannotPurchaseReason, showPresaleNotice,
   categoryName, images,
   backToListTo,
   addToCart, buyNow, goLogin, loadProduct,

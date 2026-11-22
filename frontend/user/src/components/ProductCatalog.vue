@@ -80,7 +80,7 @@
             </div>
           </template>
           <div v-for="i in 12" v-else :key="i" class="theme-float rounded-[22px] bg-card p-1.5">
-            <div class="aspect-[16/10] rounded-2xl theme-skeleton"></div>
+            <div class="aspect-square rounded-2xl theme-skeleton"></div>
             <div class="space-y-2 px-2.5 pb-2 pt-3">
               <div class="h-4 w-full rounded theme-skeleton"></div>
               <div class="h-3 w-16 rounded theme-skeleton"></div>
@@ -254,7 +254,7 @@ const groups = useProductListGroups(products, categoryMap)
 
 // 大屏左侧有分类栏，网格比通栏时少一列
 const isList = computed(() => props.layout === 'list')
-const gridClass = 'grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6'
+const gridClass = 'store-product-grid grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4 lg:grid-cols-3 xl:grid-cols-5 2xl:grid-cols-6'
 // 大卡占 2 列 2 行，分类里商品凑不满两行时旁边会留空，所以够多才放大首位
 const LEAD_MIN_GROUP_SIZE = 7
 

@@ -25,7 +25,6 @@
             </RouterView>
           </ErrorBoundary>
         </main>
-        <Footer v-if="!isResellerConsole" />
         <BackToTop v-if="!isResellerConsole" />
         <MobileBottomNav v-if="!isResellerConsole" />
       </template>
@@ -42,8 +41,9 @@ import { computed, defineAsyncComponent, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAppStore } from './stores/app'
 import { getActiveTemplate, hasTemplateHint, rememberTemplate } from './templates/registry'
+import { syncStorefrontSkin } from './utils/storefrontSkin'
+import { applyStoreWallpaper } from './utils/storeWallpaper'
 import Navbar from './components/Navbar.vue'
-import Footer from './components/Footer.vue'
 import Loading from './components/Loading.vue'
 import Toast from './components/Toast.vue'
 import ConfirmDialog from './components/ConfirmDialog.vue'
@@ -70,6 +70,12 @@ if (!shellReady.value) {
   void useRouter().isReady().catch(() => {}).finally(() => { shellReady.value = true })
 }
 watch(() => appStore.config?.storefront_template, (value) => rememberTemplate(value), { immediate: true })
+watch(() => route.path, (path) => syncStorefrontSkin(path), { immediate: true })
+watch(
+  [() => appStore.config?.brand?.wallpaper, isResellerConsole],
+  ([wallpaper, resellerConsole]) => applyStoreWallpaper(wallpaper, !resellerConsole),
+  { immediate: true },
+)
 </script>
 
 <style>

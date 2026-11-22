@@ -2,13 +2,19 @@ package settingsapp
 
 import (
 	"errors"
+	"image"
+	"image/png"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/dujiao-next/internal/config"
 	"github.com/dujiao-next/internal/constants"
 
 	settingscontract "github.com/dujiao-next/internal/modules/settings/contract"
+	"github.com/dujiao-next/internal/shared/storeimage"
 )
 
 func TestUpdateOrderSettingNormalized(t *testing.T) {
@@ -744,5 +750,112 @@ func TestUpdateSiteSettingValidatesContactLinks(t *testing.T) {
 	}
 	if _, err := svc.Update(constants.SettingKeySiteConfig, map[string]interface{}{"contact": map[string]interface{}{}}); err != nil {
 		t.Fatalf("empty contact links rejected: %v", err)
+	}
+}
+
+func TestSiteWallpaperPersistsAndFailedReplaceKeepsTheOldOne(t *testing.T) {
+	root := t.TempDir()
+	prev := storeimage.Root
+	storeimage.Root = root
+	t.Cleanup(func() { storeimage.Root = prev })
+
+	current := "/uploads/common/2026/11/11111111-1111-4111-8111-111111111111.png"
+	replacement := "/uploads/common/2026/11/99999999-9999-4999-8999-999999999999.png"
+	writeWallpaperPNG(t, root, current)
+	writeWallpaperPNG(t, root, replacement)
+
+	repo := newMockSettingRepo()
+	svc := NewService(repo)
+	saved, err := svc.Update(constants.SettingKeySiteConfig, map[string]interface{}{
+		"brand": map[string]interface{}{
+			"site_name": "Main Shop",
+			"wallpaper": "  " + current + "  ",
+		},
+	})
+	if err != nil {
+		t.Fatalf("save wallpaper failed: %v", err)
+	}
+	brand := saved["brand"].(map[string]interface{})
+	if brand["wallpaper"] != current {
+		t.Fatalf("wallpaper was not stored: %+v", brand)
+	}
+
+	_, err = svc.Update(constants.SettingKeySiteConfig, map[string]interface{}{
+		"brand": map[string]interface{}{
+			"site_name": "Main Shop",
+			"wallpaper": "https://evil.example.test/wall.png",
+		},
+	})
+	var fieldErr *SettingFieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "wallpaper" {
+		t.Fatalf("expected wallpaper field error, got %v", err)
+	}
+	kept, err := svc.GetByKey(constants.SettingKeySiteConfig)
+	if err != nil {
+		t.Fatalf("read settings failed: %v", err)
+	}
+	keptBrand := kept["brand"].(map[string]interface{})
+	if keptBrand["wallpaper"] != current || keptBrand["site_name"] != "Main Shop" {
+		t.Fatalf("failed replace changed the stored site: %+v", keptBrand)
+	}
+
+	replaced, err := svc.Update(constants.SettingKeySiteConfig, map[string]interface{}{
+		"brand": map[string]interface{}{"site_name": "Main Shop", "wallpaper": replacement},
+	})
+	if err != nil {
+		t.Fatalf("replace wallpaper failed: %v", err)
+	}
+	if replaced["brand"].(map[string]interface{})["wallpaper"] != replacement {
+		t.Fatalf("replacement was not stored: %+v", replaced["brand"])
+	}
+
+	cleared, err := svc.Update(constants.SettingKeySiteConfig, map[string]interface{}{
+		"brand": map[string]interface{}{"site_name": "Main Shop", "wallpaper": "  "},
+	})
+	if err != nil {
+		t.Fatalf("clear wallpaper failed: %v", err)
+	}
+	if cleared["brand"].(map[string]interface{})["wallpaper"] != "" {
+		t.Fatalf("empty wallpaper should restore the default background, got %+v", cleared["brand"])
+	}
+}
+
+func TestSiteWallpaperRejectsExecutableAndSVGContent(t *testing.T) {
+	root := t.TempDir()
+	prev := storeimage.Root
+	storeimage.Root = root
+	t.Cleanup(func() { storeimage.Root = prev })
+
+	path := "/uploads/common/2026/11/12121212-1212-4212-8212-121212121212.png"
+	full := filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(path, "/uploads/")))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, []byte("<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc := NewService(newMockSettingRepo())
+	_, err := svc.Update(constants.SettingKeySiteConfig, map[string]interface{}{
+		"brand": map[string]interface{}{"wallpaper": path},
+	})
+	var fieldErr *SettingFieldError
+	if !errors.As(err, &fieldErr) || fieldErr.Field != "wallpaper" {
+		t.Fatalf("expected svg content to be rejected, got %v", err)
+	}
+}
+
+func writeWallpaperPNG(t *testing.T, root, publicPath string) {
+	t.Helper()
+	full := filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(publicPath, "/uploads/")))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file, err := os.Create(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	if err := png.Encode(file, image.NewRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatal(err)
 	}
 }

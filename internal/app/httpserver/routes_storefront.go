@@ -6,6 +6,7 @@ import (
 	affiliatebootstrap "github.com/dujiao-next/internal/bootstrap/affiliate"
 	"github.com/dujiao-next/internal/config"
 	affiliatetransport "github.com/dujiao-next/internal/modules/affiliate/transport/http"
+	aifeedhttp "github.com/dujiao-next/internal/modules/aifeed/transport/http"
 	apicredentialtransport "github.com/dujiao-next/internal/modules/apicredential/transport/http"
 	auditlogtransport "github.com/dujiao-next/internal/modules/auditlog/transport/http"
 	captchatransport "github.com/dujiao-next/internal/modules/captcha/transport/http"
@@ -82,6 +83,9 @@ func registerStorefrontRoutes(
 		captchatransport.RegisterPublicRoutes(public, captchatransport.NewPublicHandler(c.CaptchaService))
 		affiliatetransport.RegisterPublicRoutes(public, affiliateHandler)
 		memberleveltransport.RegisterPublicRoutes(public, publicMemberLevelHandler)
+		if c.AIFeedService != nil {
+			aifeedhttp.RegisterPublicRoutes(public, aifeedhttp.NewHandler(c.AIFeedService))
+		}
 	}
 
 	// 游客接口

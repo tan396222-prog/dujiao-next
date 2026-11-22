@@ -348,3 +348,65 @@ func TestCouponServiceApplyCouponRespectsScopeSKUIDs(t *testing.T) {
 		t.Fatalf("expected ErrScopeInvalid for unmatched sku, got %v", err)
 	}
 }
+
+func TestEnsureSaleCouponIsPermanentSingleUseAndIdempotent(t *testing.T) {
+	svc, db := newCouponServiceForTest(t)
+	repo := coupongormstore.New(db)
+	first, err := svc.EnsureSaleCoupon(repo, 44, 1)
+	if err != nil {
+		t.Fatalf("issue coupon: %v", err)
+	}
+	second, err := svc.EnsureSaleCoupon(repo, 44, 1)
+	if err != nil {
+		t.Fatalf("reissue coupon: %v", err)
+	}
+	if first == "" || first != second || first != couponapp.SaleCouponCode(44, 1) {
+		t.Fatalf("duplicate callback issued another code: %s %s", first, second)
+	}
+	other, err := svc.EnsureSaleCoupon(repo, 44, 2)
+	if err != nil || other == first {
+		t.Fatalf("each unit needs its own code, got %s err %v", other, err)
+	}
+	var count int64
+	if err := db.Model(&coupondomain.Coupon{}).Count(&count).Error; err != nil {
+		t.Fatalf("count coupons: %v", err)
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 coupons, got %d", count)
+	}
+	stored, err := repo.GetByCode(first)
+	if err != nil || stored == nil {
+		t.Fatalf("load coupon: %v", err)
+	}
+	if stored.EndsAt != nil || stored.UsageLimit != 1 || stored.PerUserLimit != 1 || stored.ScopeType != constants.ScopeTypeStore {
+		t.Fatalf("coupon rules mismatch: %+v", stored)
+	}
+	if stored.Type != constants.CouponTypePercent || !stored.Value.Decimal.Equal(decimal.NewFromInt(10)) {
+		t.Fatalf("九折 must be a 10 percent discount, got %s %s", stored.Type, stored.Value.Decimal)
+	}
+
+	subtotal := money.FromDecimal(decimal.NewFromInt(100))
+	items := []couponcontract.EligibilityItem{{ProductID: 1, Quantity: 1, TotalPrice: subtotal}}
+	discount, _, err := svc.ApplyCoupon(subtotal, first, 7, items, false, 0)
+	if err != nil || !discount.Decimal.Equal(decimal.NewFromInt(10)) {
+		t.Fatalf("expected 10 off 100, got %s err %v", discount.Decimal, err)
+	}
+	excluded := []couponcontract.EligibilityItem{{ProductID: 9, Quantity: 1, TotalPrice: money.FromDecimal(decimal.NewFromInt(3)), CouponExcluded: true}}
+	if _, _, err := svc.ApplyCoupon(money.FromDecimal(decimal.NewFromInt(3)), first, 8, excluded, false, 0); !errors.Is(err, couponcontract.ErrScopeInvalid) {
+		t.Fatalf("coupon-sale item must be excluded, got %v", err)
+	}
+	mixed := []couponcontract.EligibilityItem{
+		{ProductID: 9, Quantity: 1, TotalPrice: money.FromDecimal(decimal.NewFromInt(3)), CouponExcluded: true},
+		{ProductID: 2, Quantity: 1, TotalPrice: money.FromDecimal(decimal.NewFromInt(100))},
+	}
+	mixedDiscount, _, err := svc.ApplyCoupon(money.FromDecimal(decimal.NewFromInt(103)), first, 8, mixed, false, 0)
+	if err != nil || !mixedDiscount.Decimal.Equal(decimal.NewFromInt(10)) {
+		t.Fatalf("discount must ignore the coupon product, got %s err %v", mixedDiscount.Decimal, err)
+	}
+	if err := db.Create(&coupondomain.CouponUsage{CouponID: stored.ID, UserID: 8, OrderID: 1, DiscountAmount: discount, CreatedAt: time.Now()}).Error; err != nil {
+		t.Fatalf("record usage: %v", err)
+	}
+	if _, _, err := svc.ApplyCoupon(subtotal, first, 8, items, false, 0); !errors.Is(err, couponcontract.ErrPerUserLimit) {
+		t.Fatalf("each coupon can be used once, got %v", err)
+	}
+}

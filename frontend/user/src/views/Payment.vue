@@ -1,5 +1,6 @@
 <template>
   <div class="min-h-screen bg-background text-foreground pt-24 pb-16">
+    <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
     <div class="container mx-auto px-4">
       <div class="mb-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         <div>
@@ -13,7 +14,7 @@
       </div>
 
       <!-- Loading Skeleton -->
-      <div v-if="loading" class="space-y-6">
+      <div v-if="paymentPageView === 'loading'" class="space-y-6">
         <div class="theme-float rounded-[22px] bg-card p-5 md:p-6 space-y-4">
           <div class="flex items-center justify-between gap-4">
             <div class="space-y-2">
@@ -36,7 +37,7 @@
         </div>
       </div>
 
-      <div v-else-if="showGuestAuthForm"
+      <div v-else-if="paymentPageView === 'guest-form'"
         class="theme-float rounded-[22px] bg-card p-5 md:p-6">
         <h2 class="mb-2 text-[17px] font-bold">{{ t('payment.guestAuthTitle') }}</h2>
         <p class="text-xs text-muted-foreground mb-4">{{ t('payment.guestAuthHint') }}</p>
@@ -57,7 +58,7 @@
       </div>
 
       <EmptyState
-        v-else-if="!order"
+        v-else-if="paymentPageView === 'empty'"
         icon="alert"
         :title="t('payment.orderNotFound')"
         :action-label="t('payment.backToOrders')"
@@ -84,6 +85,14 @@
             </div>
           </div>
 
+          <Alert
+            v-if="paymentAlert"
+            :variant="pageAlertVariant(paymentAlert.level)"
+            :class="['mt-4', pageAlertToneClass(paymentAlert.level)]"
+          >
+            <AlertDescription>{{ paymentAlert.message }}</AlertDescription>
+          </Alert>
+
           <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-2 space-y-4">
               <div v-if="showQRCode"
@@ -94,6 +103,16 @@
                 </div>
                 <div v-if="qrUsingPayLinkFallback" class="mt-3 text-xs text-muted-foreground">
                   {{ t('payment.qrFallbackHint') }}
+                </div>
+                <div v-if="showPayLink" class="mt-3 flex flex-wrap items-center justify-center gap-2">
+                  <Button type="button" variant="default" class="h-11 px-5 rounded-full bg-foreground font-semibold text-background hover:bg-foreground/85" @click="handleOpenPayLink">
+                    <ExternalLink class="h-4 w-4" aria-hidden="true" />
+                    {{ t('payment.openPayLink') }}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" class="rounded-full font-semibold" @click="handleCopyPayLink">
+                    <Copy class="h-4 w-4" aria-hidden="true" />
+                    {{ t('payment.copyPayLink') }}
+                  </Button>
                 </div>
                 <div v-if="hasCryptoPaymentDetails" class="mt-4 w-full max-w-xl space-y-2 rounded-2xl bg-card p-3 text-left">
                   <div
@@ -503,13 +522,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { usePayment } from '../composables/usePayment'
+import PaymentProtectionDialog from '../components/payment/PaymentProtectionDialog.vue'
 
 const { t } = useI18n()
 
 const {
   loading, submitting, order, paymentResult, selectedChannelId, copied, walletAddressCopied,
   openedPayWindow, cachedPayment, guestAuth, guestAuthError, walletLoading, useBalance,
-  backLink, showGuestAuthForm, walletOnlyPayment, showBalanceOption, configReady, channels,
+  backLink, paymentPageView, walletOnlyPayment, showBalanceOption, configReady, channels,
   selectedChannel, selectedChannelName, cachedChannelName, resultChannelName, interactionLabel,
   paymentResultTitle, paymentGuideTitle, paymentGuideTip, showPayLink, showTelegramPayHint, payLinkOpenedTip,
   cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, qrUsingPayLinkFallback, showQRCode, qrImageUrl,
@@ -519,6 +539,6 @@ const {
   paymentWalletPaidDisplay, paymentOnlinePayDisplay, isChannelDisabledForAmount, channelAmountLimitHint, canSubmitPayment,
   formatDate, statusLabel, formatMoney, hasDiscountAmount, formatDiscountMoney, getLocalizedText, orderItemSkuText, fulfillmentTypeLabelText,
   handleCopyPayLink, handleCopyWalletAddress, handleOpenPayLink, restoreCachedPayment, handleChangePaymentMethod,
-  handlePayment, handleGuestAuthSubmit, handleRefresh,
+  handlePayment, protectionOpen, protectionStep, protectionTotal, protectionError, cancelProtection, retryProtection, handleGuestAuthSubmit, handleRefresh,
 } = usePayment()
 </script>

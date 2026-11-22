@@ -177,6 +177,7 @@ const form = reactive({
   category_id: null as number | null,
   payment_channel_ids: [] as number[],
   is_affiliate_enabled: false,
+  coupon_sale: false,
   is_active: true,
   sort_order: 0,
   manual_form_schema: { fields: [] as ManualFormField[] },
@@ -521,6 +522,7 @@ const resetForm = () => {
     category_id: null,
     payment_channel_ids: [],
     is_affiliate_enabled: false,
+    coupon_sale: false,
     is_active: true,
     sort_order: 0,
     manual_form_schema: { fields: [] },
@@ -570,6 +572,7 @@ const populateForm = (product: AdminProduct) => {
     category_id: Number(product.category_id || 0) || null,
     payment_channel_ids: parsePaymentChannelIDs(product.payment_channel_ids),
     is_affiliate_enabled: Boolean(product.is_affiliate_enabled),
+    coupon_sale: Boolean(product.coupon_sale),
     is_active: product.is_active ?? true,
     sort_order: Number(product.sort_order || 0),
     manual_form_schema: parseManualFormSchemaForEdit(product.manual_form_schema),
@@ -645,6 +648,7 @@ const handleSubmit = async () => {
       skus: normalizedSKUs,
       payment_channel_ids: form.payment_channel_ids.length > 0 ? form.payment_channel_ids : [],
       is_affiliate_enabled: form.is_affiliate_enabled,
+      coupon_sale: form.coupon_sale,
       is_active: form.is_active,
       sort_order: Number(form.sort_order) || 0,
       manual_form_schema: normalizeManualFormSchemaForSubmit(),
@@ -1130,6 +1134,11 @@ watch(
               <Switch id="is_affiliate_enabled" v-model="form.is_affiliate_enabled" />
               <Label for="is_affiliate_enabled" class="text-sm text-muted-foreground select-none">{{ t('admin.products.form.affiliateEnabled') }}</Label>
             </div>
+            <div class="inline-flex items-center gap-2">
+              <Switch id="coupon_sale" v-model="form.coupon_sale" />
+              <Label for="coupon_sale" class="text-sm text-muted-foreground select-none">{{ t('admin.products.form.couponSale') }}</Label>
+            </div>
+            <p v-if="form.coupon_sale" class="basis-full text-xs text-muted-foreground">{{ t('admin.products.form.couponSaleTip') }}</p>
             <div class="inline-flex items-center gap-2">
               <Switch id="is_active" v-model="form.is_active" />
               <Label for="is_active" class="text-sm text-muted-foreground select-none">{{ t('admin.products.form.activeNow') }}</Label>

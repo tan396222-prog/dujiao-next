@@ -6,6 +6,7 @@ import (
 	adproxyapp "github.com/dujiao-next/internal/modules/adproxy/application"
 	affiliateapp "github.com/dujiao-next/internal/modules/affiliate/application"
 	affiliatecontract "github.com/dujiao-next/internal/modules/affiliate/contract"
+	aifeedapp "github.com/dujiao-next/internal/modules/aifeed/application"
 	apicredentialapp "github.com/dujiao-next/internal/modules/apicredential/application"
 	apicredentialcontract "github.com/dujiao-next/internal/modules/apicredential/contract"
 	auditlogapp "github.com/dujiao-next/internal/modules/auditlog/application"
@@ -196,6 +197,7 @@ type Container struct {
 	MemberLevelService            *memberlevelapp.Service
 	AdProxyService                *adproxyapp.Service
 	OrderRiskControlService       *orderriskapp.Service
+	AIFeedService                 *aifeedapp.Service
 	ComplianceService             *complianceapp.Service
 
 	PaymentProviderRegistry *paymentprovider.Registry

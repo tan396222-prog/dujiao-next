@@ -59,6 +59,7 @@ func (h *PublicHandler) decorateProductStock(product *productdomain.Product, ite
 			if hasUnlimitedSKU {
 				item.ManualStockAvailable = constants.ManualStockUnlimited
 				item.StockStatus = constants.ProductStockStatusUnlimited
+				item.Backorder = true
 				item.IsSoldOut = false
 				return
 			}
@@ -66,6 +67,7 @@ func (h *PublicHandler) decorateProductStock(product *productdomain.Product, ite
 		} else if product.ManualStockTotal == constants.ManualStockUnlimited {
 			item.ManualStockAvailable = constants.ManualStockUnlimited
 			item.StockStatus = constants.ProductStockStatusUnlimited
+			item.Backorder = true
 			item.IsSoldOut = false
 			return
 		} else {
@@ -76,7 +78,9 @@ func (h *PublicHandler) decorateProductStock(product *productdomain.Product, ite
 		}
 		item.ManualStockAvailable = manualAvailable
 		item.StockStatus = domaincatalog.StorefrontStockPolicy().Status(int64(manualAvailable))
-		item.IsSoldOut = item.StockStatus == constants.ProductStockStatusOutOfStock
+		// 本地人工库存可以预售。售罄标记留给真正不能补货的上游商品。
+		item.Backorder = true
+		item.IsSoldOut = false
 		return
 	}
 
@@ -99,7 +103,8 @@ func (h *PublicHandler) decorateProductStock(product *productdomain.Product, ite
 	item.AutoStockSold = autoSold
 
 	item.StockStatus = domaincatalog.StorefrontStockPolicy().Status(autoAvailable)
-	item.IsSoldOut = item.StockStatus == constants.ProductStockStatusOutOfStock
+	item.Backorder = true
+	item.IsSoldOut = false
 }
 
 // decorateUpstreamStock 根据 SKU 映射的上游库存信息填充商品及 SKU 级库存状态

@@ -264,7 +264,7 @@ func (a *epayAdapter) VerifyCallback(raw jsonmap.JSON, form map[string][]string,
 		ProviderRef: providerRef,
 		Status:      status,
 		Amount:      amount,
-		Currency:    "CNY",
+		Currency:    "",  // 易支付通知没有币种字段，由业务层固定为订单所属支付的币种
 		PaidAt:      nil, // epay callback 不带付款时间字段
 		Payload:     gatewaycommon.FormToJSON(form),
 	}, nil

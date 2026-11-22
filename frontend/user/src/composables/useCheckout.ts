@@ -1,5 +1,5 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { NavigationFailureType, isNavigationFailure, useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useCartStore, type CartItem } from '../stores/cart'
 import { useBuyNowStore } from '../stores/buyNow'
@@ -12,7 +12,10 @@ import { amountToCents, basisPointsToPercent, centsToAmount, parseInteger, rateT
 import { buildSkuDisplayText, normalizeSkuId } from '../utils/sku'
 import { refreshCartStockSnapshots, cartItemPurchaseLimit as itemPurchaseLimit, cartItemPurchaseMin as itemPurchaseMin } from '../utils/cartStock'
 import { getImageUrl } from '../utils/image'
+import { resolveCartStockTier, stockTierMessageKey } from '../utils/publicStock'
 import { getAffiliateCode, getAffiliateVisitorKey } from '../utils/affiliate'
+import { protectionHeaders, requestProtection } from '../utils/paymentProtection'
+import { checkoutAttemptFingerprint, readPlacedCheckoutOrder, rememberPlacedCheckoutOrder } from '../utils/checkoutOrderResume'
 import { saveGuestOrderAuth } from '../utils/guestOrderAuth'
 import ImageCaptcha from '../components/captcha/ImageCaptcha.vue'
 import TurnstileCaptcha from '../components/captcha/TurnstileCaptcha.vue'
@@ -66,6 +69,10 @@ export function useCheckout() {
   const couponCode = ref('')
   const normalizedCouponCode = computed(() => couponCode.value.trim())
   const submitting = ref(false)
+  const protectionOpen = ref(false)
+  const protectionStep = ref(1)
+  const protectionError = ref('')
+  let protectionController: AbortController | null = null
   const error = ref('')
   const preview = ref<any>(null)
   const previewLoading = ref(false)
@@ -809,6 +816,40 @@ export function useCheckout() {
     }
   }
 
+  const checkoutResumeStorage = () => {
+    if (typeof sessionStorage === 'undefined') return null
+    return sessionStorage
+  }
+
+  const currentCheckoutFingerprint = () => checkoutAttemptFingerprint({
+    items: cartItems.value.map((item) => ({
+      productId: item.productId,
+      skuId: item.skuId,
+      quantity: item.quantity,
+      fulfillmentType: item.fulfillmentType,
+    })),
+    manualForm: buildManualFormDataPayload(),
+    couponCode: normalizedCouponCode.value,
+    channelId: selectedChannelId.value,
+    useBalance: useBalance.value,
+    guestEmail: userAuthStore.isAuthenticated ? '' : guestEmail.value,
+  })
+
+  const openPaymentPage = async (orderNo: string, guest: boolean) => {
+    const location = {
+      name: 'payment' as const,
+      query: guest ? { guest: '1', order_no: orderNo } : { order_no: orderNo },
+    }
+    try {
+      const failure = await router.push(location)
+      if (failure && !isNavigationFailure(failure, NavigationFailureType.duplicated)) {
+        window.location.assign(router.resolve(location).href)
+      }
+    } catch {
+      window.location.assign(router.resolve(location).href)
+    }
+  }
+
   const handleSubmit = async () => {
     submitAttempted.value = true
     error.value = ''
@@ -818,11 +859,42 @@ export function useCheckout() {
       return
     }
 
+    const fingerprint = currentCheckoutFingerprint()
+    const resumeStorage = checkoutResumeStorage()
+    const placed = resumeStorage ? readPlacedCheckoutOrder(fingerprint, resumeStorage) : null
+    if (placed) {
+      submitting.value = true
+      try {
+        clearSourceStore()
+        await openPaymentPage(placed.orderNo, placed.guest)
+      } finally {
+        submitting.value = false
+      }
+      return
+    }
+
     submitting.value = true
+    protectionOpen.value = true
+    protectionError.value = ''
+    protectionStep.value = 1
+    protectionController = new AbortController()
     try {
       await loadPreviewNow()
+      if (protectionController.signal.aborted) return
       if (previewError.value) {
         error.value = previewError.value
+        protectionError.value = previewError.value
+        return
+      }
+      protectionStep.value = 2
+      const precheck = await requestProtection({
+        authenticated: userAuthStore.isAuthenticated,
+        bind: 'checkout',
+        signal: protectionController.signal,
+      })
+      if (precheck.banned) {
+        protectionError.value = t('paymentProtection.limited')
+        error.value = protectionError.value
         return
       }
 
@@ -831,11 +903,13 @@ export function useCheckout() {
         channel_id: requiresOnlineChannel.value ? (selectedChannelId.value || undefined) : undefined,
         use_balance: useBalance.value,
       }
+      const requestOptions = { headers: protectionHeaders(precheck.token), signal: protectionController.signal }
 
       let responseData: any
 
+      protectionStep.value = 3
       if (userAuthStore.isAuthenticated) {
-        const response = await userOrderAPI.createAndPay(payload)
+        const response = await userOrderAPI.createAndPay(payload, requestOptions)
         responseData = response.data.data
       } else {
         const response = await guestOrderAPI.createAndPay({
@@ -843,7 +917,7 @@ export function useCheckout() {
           email: guestEmail.value.trim(),
           order_password: guestPassword.value,
           captcha_payload: getGuestCaptchaPayload(),
-        })
+        }, requestOptions)
         saveGuestOrderAuth({
           email: guestEmail.value.trim(),
           order_password: guestPassword.value,
@@ -855,15 +929,24 @@ export function useCheckout() {
         throw new Error(t('checkout.errors.submitFailed'))
       }
 
+      const placedOrderNo = String(responseData.order_no)
+      if (resumeStorage) {
+        rememberPlacedCheckoutOrder({
+          fingerprint,
+          orderNo: placedOrderNo,
+          guest: !userAuthStore.isAuthenticated,
+          at: Date.now(),
+        }, resumeStorage)
+      }
       clearSourceStore()
 
-      // Redirect to the existing Payment page which handles all payment display
-      const query = userAuthStore.isAuthenticated
-        ? `order_no=${encodeURIComponent(responseData.order_no)}`
-        : `guest=1&order_no=${encodeURIComponent(responseData.order_no)}`
-      router.push(`/pay?${query}`)
+      protectionStep.value = 4
+      await openPaymentPage(placedOrderNo, !userAuthStore.isAuthenticated)
+      protectionOpen.value = false
     } catch (err: any) {
+      if (protectionController?.signal.aborted) return
       error.value = err.message || t('checkout.errors.submitFailed')
+      protectionError.value = error.value
       if (guestCaptchaEnabled.value && captchaProvider.value === 'image') {
         guestImageCaptchaRef.value?.refresh()
       }
@@ -873,7 +956,20 @@ export function useCheckout() {
       }
     } finally {
       submitting.value = false
+      if (!protectionError.value) protectionOpen.value = false
     }
+  }
+
+  const cancelProtection = () => {
+    protectionController?.abort()
+    protectionOpen.value = false
+    protectionError.value = ''
+    submitting.value = false
+  }
+
+  const retryProtection = () => {
+    protectionError.value = ''
+    void handleSubmit()
   }
 
   watch(
@@ -939,6 +1035,7 @@ export function useCheckout() {
   onUnmounted(() => {
     debouncedLoadPreview.cancel()
     debouncedLoadOrderPaymentChannels.cancel()
+    protectionController?.abort()
   })
 
   const cartItemKey = (item: CartItem) => `${item.productId}:${normalizeSkuId(item.skuId)}`
@@ -1039,26 +1136,13 @@ export function useCheckout() {
     return Math.max(integerValue, 0)
   }
 
-  const hasItemStockSnapshot = (item: CartItem) => Boolean(String(item.skuStockSnapshotAt || '').trim())
-
-  const shouldEnforceItemStock = (item: CartItem) => {
-    if (item.skuStockQuantityHidden === true) return false
-    if (item.fulfillmentType === 'auto') return true
-    if (item.fulfillmentType === 'upstream') return true
-    if (item.fulfillmentType !== 'manual') return false
-    if (!hasItemStockSnapshot(item)) return false
-    const total = normalizeManualStockTotal(item.skuManualStockTotal)
-    if (total === -1) return false
-    if (item.skuStockEnforced === true) return true
-    if (item.skuStockEnforced === false) return false
-    return true
-  }
+  const shouldEnforceItemStock = (item: CartItem) => item.skuStockEnforced === true || (item.skuStockEnforced == null && item.fulfillmentType === 'upstream')
 
   const itemAvailableStock = (item: CartItem) => {
+    if (!shouldEnforceItemStock(item)) return null
     if (item.skuStockQuantityHidden === true) {
       return item.skuStockStatus === 'out_of_stock' ? 0 : null
     }
-    if (!shouldEnforceItemStock(item)) return null
     if (item.fulfillmentType === 'upstream') {
       const upstreamStock = Number(item.skuUpstreamStock ?? 0)
       if (upstreamStock === -1) return null // 无限库存
@@ -1100,17 +1184,21 @@ export function useCheckout() {
     if (itemMinNotMet(item)) {
       return t('cart.minPurchaseNotMet', { count: itemPurchaseMin(item) })
     }
-    if (available === null && purchaseLimit === null) return ''
+    if (available === null && purchaseLimit === null) return t(stockTierMessageKey(resolveCartStockTier(item)))
     if (maxQuantity <= 0) return t('cart.stockOut')
     if (itemStockExceeded(item)) {
       if (purchaseLimit !== null && maxQuantity === purchaseLimit && (available === null || purchaseLimit < available)) {
         return t('cart.maxPurchaseExceeded', { count: purchaseLimit })
       }
-      return t('cart.stockExceeded', { count: maxQuantity })
+      if (maxQuantity <= 5) return t('products.stockTier.low')
+      if (maxQuantity <= 20) return t('products.stockTier.mid')
+      return t('products.stockTier.high')
     }
-    if (available === null) return ''
-    if (available <= 0) return t('cart.stockOut')
-    return t('cart.stockRemaining', { count: available })
+    if (available === null) return t(stockTierMessageKey(resolveCartStockTier(item)))
+    if (available <= 0) return t('products.stockTier.unavailable')
+    if (available <= 5) return t('products.stockTier.low')
+    if (available <= 20) return t('products.stockTier.mid')
+    return t('products.stockTier.high')
   }
 
   return {
@@ -1191,5 +1279,11 @@ export function useCheckout() {
     submitting,
     canSubmit,
     handleSubmit,
+    protectionOpen,
+    protectionStep,
+    protectionTotal: 4,
+    protectionError,
+    cancelProtection,
+    retryProtection,
   }
 }

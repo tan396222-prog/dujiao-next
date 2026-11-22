@@ -13,6 +13,12 @@ import { notifyError, notifySuccess } from '@/utils/notify'
 const { t } = useI18n()
 const loading = ref(false)
 const submitting = ref(false)
+const attemptsLoading = ref(false)
+const unbanSubmitting = ref(false)
+const unbanIP = ref('')
+const clientIdentity = ref<Record<string, string>>({})
+const activeAttempts = ref<Array<Record<string, unknown>>>([])
+const attemptEvents = ref<Array<Record<string, unknown>>>([])
 
 const defaultRateLimit = (guest: boolean) => ({
   enabled: guest,
@@ -21,10 +27,18 @@ const defaultRateLimit = (guest: boolean) => ({
   block_seconds: 120,
 })
 
+const defaultAttemptLimit = () => ({
+  enabled: true,
+  window_seconds: 60,
+  max_requests: 20,
+  block_seconds: 86400,
+})
+
 const form = reactive({
   enabled: false,
   common: {
     ip_blacklist_text: '',
+    attempt_limit: defaultAttemptLimit(),
   },
   guest: {
     enabled: true,
@@ -57,6 +71,15 @@ const applyRateLimit = (target: typeof form.guest.rate_limit, raw: unknown, gues
   target.block_seconds = numberValue(data?.block_seconds, defaults.block_seconds)
 }
 
+const applyAttemptLimit = (raw: unknown) => {
+  const data = raw as Record<string, unknown> | undefined
+  const defaults = defaultAttemptLimit()
+  form.common.attempt_limit.enabled = data?.enabled != null ? !!data.enabled : defaults.enabled
+  form.common.attempt_limit.window_seconds = numberValue(data?.window_seconds, defaults.window_seconds)
+  form.common.attempt_limit.max_requests = numberValue(data?.max_requests, defaults.max_requests)
+  form.common.attempt_limit.block_seconds = numberValue(data?.block_seconds, defaults.block_seconds)
+}
+
 const applyLegacyRateLimit = (target: typeof form.guest.rate_limit, raw: unknown) => {
   const data = raw as Record<string, unknown> | undefined
   target.enabled = data?.enabled != null ? !!data.enabled : false
@@ -80,6 +103,7 @@ const loadNestedConfig = (data: Record<string, unknown>) => {
   const member = data.member as Record<string, unknown> | undefined
   form.enabled = !!data.enabled
   form.common.ip_blacklist_text = ((common?.ip_blacklist as string[] | undefined) || []).join('\n')
+  applyAttemptLimit(common?.attempt_limit)
 
   form.guest.enabled = guest?.enabled != null ? !!guest.enabled : true
   form.guest.max_pending_orders_per_ip = numberValue(guest?.max_pending_orders_per_ip, 2)
@@ -142,6 +166,12 @@ const save = async () => {
         enabled: form.enabled,
         common: {
           ip_blacklist: normalizeLines(form.common.ip_blacklist_text),
+          attempt_limit: {
+            enabled: form.common.attempt_limit.enabled,
+            window_seconds: Number(form.common.attempt_limit.window_seconds),
+            max_requests: Number(form.common.attempt_limit.max_requests),
+            block_seconds: Number(form.common.attempt_limit.block_seconds),
+          },
         },
         guest: {
           enabled: form.guest.enabled,
@@ -179,6 +209,48 @@ const save = async () => {
   }
 }
 
+const loadAttempts = async () => {
+  attemptsLoading.value = true
+  try {
+    const [attemptsRes, identityRes] = await Promise.all([
+      adminAPI.getOrderRiskAttempts(),
+      adminAPI.getOrderRiskClientIP(),
+    ])
+    const report = attemptsRes.data?.data as Record<string, unknown> | undefined
+    activeAttempts.value = (report?.active as Array<Record<string, unknown>> | undefined) || []
+    attemptEvents.value = (report?.events as Array<Record<string, unknown>> | undefined) || []
+    clientIdentity.value = (identityRes.data?.data as Record<string, string> | undefined) || {}
+  } catch (err) {
+    const known = err as Error & { __notified?: boolean }
+    if (!known?.__notified) notifyError(known?.message || t('admin.settings.alerts.saveFailed'))
+  } finally {
+    attemptsLoading.value = false
+  }
+}
+
+const unbanAttempt = async () => {
+  const ip = unbanIP.value.trim()
+  if (!ip) return
+  unbanSubmitting.value = true
+  try {
+    await adminAPI.unbanOrderRiskAttempt(ip)
+    unbanIP.value = ''
+    notifySuccess(t('admin.settings.alerts.saveSuccess'))
+    await loadAttempts()
+  } catch (err) {
+    const known = err as Error & { __notified?: boolean }
+    if (!known?.__notified) notifyError(known?.message || t('admin.settings.alerts.saveFailed'))
+  } finally {
+    unbanSubmitting.value = false
+  }
+}
+
+const sourceLabel = (source: string) => {
+  if (source === 'forwarded') return t('admin.settings.orderRiskControl.clientIdentity.forwarded')
+  if (source === 'remote') return t('admin.settings.orderRiskControl.clientIdentity.remote')
+  return t('admin.settings.orderRiskControl.clientIdentity.unavailable')
+}
+
 const formatLimit = (value: number) => value > 0 ? String(value) : t('admin.settings.orderRiskControl.noLimit')
 const guestSummary = computed(() => t('admin.settings.orderRiskControl.guest.summary', {
   orders: formatLimit(Number(form.guest.max_pending_orders_per_ip)),
@@ -187,7 +259,10 @@ const guestSummary = computed(() => t('admin.settings.orderRiskControl.guest.sum
 }))
 
 defineExpose({ save })
-onMounted(loadConfig)
+onMounted(() => {
+  loadConfig()
+  loadAttempts()
+})
 </script>
 
 <template>
@@ -209,6 +284,84 @@ onMounted(loadConfig)
           </span>
           <Switch v-model="form.enabled" />
         </div>
+      </div>
+    </section>
+
+    <section class="rounded-xl border bg-card p-5">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 class="text-base font-semibold">{{ t('admin.settings.orderRiskControl.attemptLimit.title') }}</h3>
+          <p class="mt-1 max-w-3xl text-xs leading-5 text-muted-foreground">{{ t('admin.settings.orderRiskControl.attemptLimit.subtitle') }}</p>
+          <p class="mt-2 max-w-3xl text-xs leading-5 text-muted-foreground">{{ t('admin.settings.orderRiskControl.attemptLimit.deviceHint') }}</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-xs">{{ t('admin.settings.orderRiskControl.attemptLimit.enabled') }}</span>
+          <Switch v-model="form.common.attempt_limit.enabled" />
+        </div>
+      </div>
+      <div v-show="form.common.attempt_limit.enabled" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div class="space-y-2"><Label>{{ t('admin.settings.orderRiskControl.rateLimit.windowSeconds') }}</Label><Input v-model.number="form.common.attempt_limit.window_seconds" type="number" min="10" max="3600" /></div>
+        <div class="space-y-2"><Label>{{ t('admin.settings.orderRiskControl.rateLimit.maxRequests') }}</Label><Input v-model.number="form.common.attempt_limit.max_requests" type="number" min="1" max="100" /></div>
+        <div class="space-y-2"><Label>{{ t('admin.settings.orderRiskControl.rateLimit.blockSeconds') }}</Label><Input v-model.number="form.common.attempt_limit.block_seconds" type="number" min="0" max="86400" /></div>
+      </div>
+
+      <div class="mt-6 rounded-lg border bg-muted/20 p-4">
+        <h4 class="text-sm font-semibold">{{ t('admin.settings.orderRiskControl.clientIdentity.title') }}</h4>
+        <p class="mt-1 text-xs leading-5 text-muted-foreground">{{ t('admin.settings.orderRiskControl.clientIdentity.subtitle') }}</p>
+        <dl class="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+          <div><dt class="text-muted-foreground">{{ t('admin.settings.orderRiskControl.clientIdentity.ip') }}</dt><dd class="font-mono">{{ clientIdentity.ip || '-' }}</dd></div>
+          <div><dt class="text-muted-foreground">{{ t('admin.settings.orderRiskControl.clientIdentity.riskIp') }}</dt><dd class="font-mono">{{ clientIdentity.risk_ip || '-' }}</dd></div>
+          <div><dt class="text-muted-foreground">{{ t('admin.settings.orderRiskControl.clientIdentity.source') }}</dt><dd>{{ sourceLabel(clientIdentity.source || '') }}</dd></div>
+          <div><dt class="text-muted-foreground">{{ t('admin.settings.orderRiskControl.clientIdentity.peer') }}</dt><dd class="font-mono">{{ clientIdentity.peer || '-' }}</dd></div>
+        </dl>
+      </div>
+
+      <div class="mt-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h4 class="text-sm font-semibold">{{ t('admin.settings.orderRiskControl.attempts.title') }}</h4>
+            <p class="mt-1 text-xs leading-5 text-muted-foreground">{{ t('admin.settings.orderRiskControl.attempts.subtitle') }}</p>
+          </div>
+          <div class="flex gap-2">
+            <Input v-model="unbanIP" :placeholder="t('admin.settings.orderRiskControl.attempts.unbanPlaceholder')" class="w-48 font-mono" />
+            <Button type="button" variant="outline" :disabled="unbanSubmitting" @click="unbanAttempt">{{ t('admin.settings.orderRiskControl.attempts.unbanAction') }}</Button>
+          </div>
+        </div>
+        <p v-if="!activeAttempts.length" class="mt-3 text-xs text-muted-foreground">{{ t('admin.settings.orderRiskControl.attempts.empty') }}</p>
+        <div v-else class="mt-3 overflow-x-auto">
+          <table class="w-full text-left text-xs">
+            <thead class="text-muted-foreground">
+              <tr>
+                <th class="py-2 pr-3">{{ t('admin.settings.orderRiskControl.attempts.ip') }}</th>
+                <th class="py-2 pr-3">{{ t('admin.settings.orderRiskControl.attempts.count') }}</th>
+                <th class="py-2 pr-3">{{ t('admin.settings.orderRiskControl.attempts.status') }}</th>
+                <th class="py-2 pr-3">{{ t('admin.settings.orderRiskControl.attempts.reason') }}</th>
+                <th class="py-2 pr-3">{{ t('admin.settings.orderRiskControl.attempts.retry') }}</th>
+                <th class="py-2 pr-3">{{ t('admin.settings.orderRiskControl.attempts.device') }}</th>
+                <th class="py-2">{{ t('admin.settings.orderRiskControl.attempts.backend') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in activeAttempts" :key="String(item.ip)" class="border-t">
+                <td class="py-2 pr-3 font-mono">{{ item.ip }}</td>
+                <td class="py-2 pr-3">{{ item.count }}/{{ item.limit }}</td>
+                <td class="py-2 pr-3">{{ item.banned ? t('admin.settings.orderRiskControl.attempts.banned') : t('admin.settings.orderRiskControl.attempts.watching') }}</td>
+                <td class="py-2 pr-3">{{ item.reason }}</td>
+                <td class="py-2 pr-3">{{ item.retry_after_seconds }}</td>
+                <td class="py-2 pr-3 font-mono">{{ item.device || '-' }}</td>
+                <td class="py-2">{{ item.backend }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h4 class="mt-4 text-sm font-semibold">{{ t('admin.settings.orderRiskControl.attempts.events') }}</h4>
+        <p v-if="!attemptEvents.length" class="mt-2 text-xs text-muted-foreground">{{ t('admin.settings.orderRiskControl.attempts.noEvents') }}</p>
+        <ul v-else class="mt-2 space-y-1 text-xs">
+          <li v-for="(event, index) in attemptEvents" :key="index" class="font-mono">
+            {{ event.at }} {{ event.action }} {{ event.ip }} {{ event.reason }} {{ event.device || '' }}
+          </li>
+        </ul>
+        <p v-if="attemptsLoading" class="mt-2 text-xs text-muted-foreground">...</p>
       </div>
     </section>
 

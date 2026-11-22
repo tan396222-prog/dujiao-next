@@ -95,6 +95,48 @@ export const getCachedPaymentRestorePolicy = (): CachedPaymentRestorePolicy => (
 
 export const shouldAutoOpenPaymentLink = (payment?: { interaction_mode?: unknown; pay_url?: unknown; fee_policy?: unknown } | null) => {
   if (!payment || isCustomerSurchargePayment(payment)) return false
-  const payURL = String(payment.pay_url || '').trim()
-  return isRedirectPaymentInteractionMode(payment.interaction_mode) && payURL !== ''
+  if (!isRedirectPaymentInteractionMode(payment.interaction_mode)) return false
+  return resolvePaymentNavigationURL(payment.pay_url) !== null
+}
+
+export type PaymentLinkOpenResult = 'opened' | 'missing' | 'rejected' | 'blocked'
+
+// 只接受绝对 http(s)。相对地址、javascript: 和无法解析的值不能拿去跳转，否则当前页会被换成空白。
+export const resolvePaymentNavigationURL = (value: unknown): string | null => {
+  const raw = String(value ?? '').trim()
+  if (!raw || raw.length > 2048) return null
+  try {
+    const url = new URL(raw)
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null
+    return url.href
+  } catch {
+    return null
+  }
+}
+
+export const openResolvedPaymentLink = (input: {
+  url: unknown
+  automatic: boolean
+  assign: (url: string) => void
+  openWindow: (url: string) => boolean
+  telegram?: boolean
+  openTelegram?: (url: string) => void
+}): PaymentLinkOpenResult => {
+  const raw = String(input.url ?? '').trim()
+  if (!raw) return 'missing'
+  const safeURL = resolvePaymentNavigationURL(raw)
+  if (!safeURL) return 'rejected'
+  try {
+    if (input.telegram && input.openTelegram) {
+      input.openTelegram(safeURL)
+      return 'opened'
+    }
+    if (resolvePaymentLinkNavigationTarget(input.automatic) === 'current-tab') {
+      input.assign(safeURL)
+      return 'opened'
+    }
+    return input.openWindow(safeURL) ? 'opened' : 'blocked'
+  } catch {
+    return 'rejected'
+  }
 }

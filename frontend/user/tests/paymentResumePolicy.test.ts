@@ -5,8 +5,10 @@ import {
   getPaymentResetPolicy,
   isCustomerSurchargePayment,
   isRedirectPaymentInteractionMode,
+  openResolvedPaymentLink,
   resolvePaymentInteractionLabelKey,
   resolvePaymentLinkNavigationTarget,
+  resolvePaymentNavigationURL,
   resolvePaymentPresentationMode,
   resolvePaymentResultTitleKey,
   shouldAutoOpenPaymentLink,
@@ -86,4 +88,46 @@ test('redirect-style payments auto open unless a customer fee needs confirmation
 test('automatic cashier navigation uses the current tab to avoid popup blocking', () => {
   assert.equal(resolvePaymentLinkNavigationTarget(true), 'current-tab')
   assert.equal(resolvePaymentLinkNavigationTarget(false), 'new-window')
+})
+
+test('epay alipay qr stays on the payment page and unsafe cashier urls are not opened', () => {
+  assert.equal(
+    shouldAutoOpenPaymentLink({ interaction_mode: 'qr', pay_url: 'https://pay.example.com/alipay-qr' }),
+    false,
+  )
+  assert.equal(resolvePaymentNavigationURL('https://pay.example.com/alipay'), 'https://pay.example.com/alipay')
+  assert.equal(resolvePaymentNavigationURL(' javascript:alert(1) '), null)
+  assert.equal(resolvePaymentNavigationURL('/pay?order_no=1'), null)
+  assert.equal(resolvePaymentNavigationURL(''), null)
+
+  const assigned: string[] = []
+  const rejected = openResolvedPaymentLink({
+    url: 'javascript:alert(1)',
+    automatic: true,
+    assign: (url) => assigned.push(url),
+    openWindow: () => true,
+  })
+  assert.equal(rejected, 'rejected')
+  assert.deepEqual(assigned, [])
+
+  const opened = openResolvedPaymentLink({
+    url: 'https://pay.example.com/alipay-wap',
+    automatic: true,
+    assign: (url) => assigned.push(url),
+    openWindow: () => {
+      throw new Error('popup should not be used for automatic navigation')
+    },
+  })
+  assert.equal(opened, 'opened')
+  assert.deepEqual(assigned, ['https://pay.example.com/alipay-wap'])
+
+  const blocked = openResolvedPaymentLink({
+    url: 'https://pay.example.com/alipay-page',
+    automatic: false,
+    assign: () => {
+      throw new Error('manual open should use a new window')
+    },
+    openWindow: () => false,
+  })
+  assert.equal(blocked, 'blocked')
 })

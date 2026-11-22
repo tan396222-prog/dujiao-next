@@ -275,6 +275,43 @@ func TestEpayAdapter_VerifyCallbackRejectsMerchantMismatch(t *testing.T) {
 	}
 }
 
+func TestEpayAdapter_NonSuccessStatusIsNotPaymentProof(t *testing.T) {
+	adapter := NewEpayAdapter()
+	if _, ok := interface{}(adapter).(paymentcontract.GatewayCapturer); ok {
+		t.Fatal("epay must not accept a client capture as payment proof")
+	}
+	raw := jsonmap.JSON{
+		"gateway_url": "https://epay.example.com", "epay_version": "v1", "merchant_id": "1001",
+		"merchant_key": "key-001", "notify_url": "https://api.example.com/callback", "return_url": "https://shop.example.com/pay",
+	}
+	form := signEpayV1AdapterCallbackForm(map[string]string{
+		"pid": "1001", "out_trade_no": "ORDER-1001", "trade_no": "EPAY-2001",
+		"money": "10.00", "trade_status": "TRADE_CLOSED",
+	}, "key-001")
+	result, err := adapter.(paymentcontract.GatewayCallbackVerifier).VerifyCallback(raw, form, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status == constants.PaymentStatusSuccess {
+		t.Fatal("a signed non-success status was treated as paid")
+	}
+	if result.Currency != "" || !result.Amount.Decimal.Equal(decimal.RequireFromString("10.00")) {
+		t.Fatalf("amount=%s currency=%s", result.Amount.Decimal, result.Currency)
+	}
+	form["money"] = []string{"not-a-number"}
+	form = signEpayV1AdapterCallbackForm(map[string]string{
+		"pid": "1001", "out_trade_no": "ORDER-1001", "trade_no": "EPAY-2001",
+		"money": "not-a-number", "trade_status": constants.EpayTradeStatusSuccess,
+	}, "key-001")
+	result, err = adapter.(paymentcontract.GatewayCallbackVerifier).VerifyCallback(raw, form, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != constants.PaymentStatusSuccess || result.Amount.Decimal.IsPositive() {
+		t.Fatalf("unparseable amount must stay non-positive for the service to reject, status=%s amount=%s", result.Status, result.Amount.Decimal)
+	}
+}
+
 func TestEpayAdapter_MapEpayError(t *testing.T) {
 	cases := []struct {
 		name string

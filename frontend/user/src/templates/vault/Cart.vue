@@ -55,7 +55,7 @@
                   class="h-10 w-[46px] border-x bg-card text-center font-bold tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   :value="item.quantity"
                   :min="itemPurchaseMin(item)"
-                  :max="itemMaxQuantity(item)"
+                  :max="itemPurchaseLimit(item) || undefined"
                   @change="handleQtyChange(item, $event)"
                 />
                 <button type="button" class="grid h-10 w-[38px] place-items-center bg-card text-foreground disabled:opacity-35" :aria-label="t('cart.remove')" :disabled="item.quantity >= itemMaxQuantity(item)" @click="updateQty(item, item.quantity + 1)"><Plus class="h-4 w-4" /></button>
@@ -106,7 +106,7 @@ const {
   getLocalizedText, formatPrice, totalCurrency,
   cartItems, totalItems, totalAmount,
   cartItemKey, cartItemImage, itemSkuDisplay, itemSubtotal, itemStockHint, quantityWarning,
-  itemPurchaseMin, itemMaxQuantity,
+  itemPurchaseMin, itemPurchaseLimit, itemMaxQuantity,
   removeWithUndo, updateQty, handleQtyChange,
 } = useCart()
 </script>

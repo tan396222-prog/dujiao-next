@@ -9,6 +9,7 @@ var (
 	ErrProductQuantityLimit        = errors.New("risk: product quantity limit")
 	ErrPendingProductQuantityLimit = errors.New("risk: pending product quantity limit")
 	ErrOrderRateLimited            = errors.New("risk: order rate limited")
+	ErrAttemptKeyInvalid           = errors.New("risk: attempt key invalid")
 )
 
 // RateLimitedError 携带 Retry-After 秒数。

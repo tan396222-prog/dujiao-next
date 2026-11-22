@@ -44,6 +44,37 @@ func (r *Store) GetProfileByID(id uint) (*affiliatedomain.Profile, error) {
 	return &profile, nil
 }
 
+// GetProfileByIDForUpdate 锁定推广档案，用于抵扣未追回佣金。
+func (r *Store) GetProfileByIDForUpdate(id uint) (*affiliatedomain.Profile, error) {
+	if id == 0 {
+		return nil, nil
+	}
+	var profile affiliatedomain.Profile
+	err := r.db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ? AND deleted_at IS NULL", id).
+		First(&profile).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &profile, nil
+}
+
+// UpdateProfileDebt 只更新未追回佣金，不改推广状态。
+func (r *Store) UpdateProfileDebt(profile *affiliatedomain.Profile) error {
+	if profile == nil || profile.ID == 0 {
+		return nil
+	}
+	return r.db.Model(&affiliatedomain.Profile{}).
+		Where("id = ? AND deleted_at IS NULL", profile.ID).
+		Updates(map[string]interface{}{
+			"unrecovered_commission": profile.UnrecoveredCommission,
+			"updated_at":             profile.UpdatedAt,
+		}).Error
+}
+
 // UpdateProfileStatus 更新推广档案状态
 func (r *Store) UpdateProfileStatus(id uint, status string, updatedAt time.Time) error {
 	if id == 0 {
@@ -223,6 +254,24 @@ func (r *Store) GetCommissionByOrderAndProfile(orderID, profileID uint, commissi
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
+		return nil, err
+	}
+	return &commission, nil
+}
+
+// GetCommissionByIDForUpdate 锁定一条佣金，避免并发入账重复抵扣欠款。
+func (r *Store) GetCommissionByIDForUpdate(id uint) (*affiliatedomain.Commission, error) {
+	if id == 0 {
+		return nil, nil
+	}
+	var commission affiliatedomain.Commission
+	err := r.db.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ? AND deleted_at IS NULL", id).
+		First(&commission).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
 		return nil, err
 	}
 	return &commission, nil

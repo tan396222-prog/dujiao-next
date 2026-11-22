@@ -17,6 +17,16 @@ type Handlers struct {
 
 // New assembles order transports and their composition-boundary adapters.
 func New(c *container.Container) Handlers {
+	create := ordertransport.NewCreateHandler(
+		orderCreateAdapter{orders: c.OrderService},
+		orderUserPaymentChannelAdapter{payments: c.PaymentService},
+		orderGuestCreateCaptchaAdapter{captcha: c.CaptchaService},
+		orderPaymentCreatorAdapter{payments: c.PaymentService},
+	)
+	if c.Config != nil {
+		create.UseDeviceSignal(c.Config.App.SecretKey)
+	}
+	create.UseOrderProtection(c.OrderRiskControlService)
 	return Handlers{
 		Admin: ordertransport.NewAdminHandler(
 			orderAdminQueryAdapter{orders: c.OrderService},
@@ -42,12 +52,7 @@ func New(c *container.Container) Handlers {
 		Preview: ordertransport.NewPreviewHandler(
 			orderPreviewAdapter{orders: c.OrderService},
 		),
-		Create: ordertransport.NewCreateHandler(
-			orderCreateAdapter{orders: c.OrderService},
-			orderUserPaymentChannelAdapter{payments: c.PaymentService},
-			orderGuestCreateCaptchaAdapter{captcha: c.CaptchaService},
-			orderPaymentCreatorAdapter{payments: c.PaymentService},
-		),
+		Create: create,
 	}
 }
 

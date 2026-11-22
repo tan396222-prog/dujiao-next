@@ -5,7 +5,7 @@ import QRCode from 'qrcode'
 import { walletAPI } from '../api/wallet'
 import { useTelegramMiniAppStore } from '../stores/telegramMiniApp'
 import { copyText } from '../utils/clipboard'
-import { isCustomerSurchargePayment, resolvePaymentLinkNavigationTarget, resolvePaymentPresentationMode, shouldAutoOpenPaymentLink } from '../utils/paymentResumePolicy'
+import { isCustomerSurchargePayment, openResolvedPaymentLink, resolvePaymentPresentationMode, shouldAutoOpenPaymentLink } from '../utils/paymentResumePolicy'
 import type { BadgeTone } from '../utils/status'
 
 /**
@@ -25,6 +25,7 @@ export function useRechargeOrderDetail() {
   const walletAddressCopiedTimer = ref<number | null>(null)
   const qrImageUrl = ref('')
   const qrRenderVersion = ref(0)
+  const payLinkError = ref('')
 
   const rechargeNo = computed(() => String(route.params.recharge_no || '').trim())
 
@@ -216,18 +217,27 @@ export function useRechargeOrderDetail() {
   }
 
   const openPayLinkInCompatibleWindow = (automatic: boolean) => {
-    if (!payLink.value) return
-    if (isTelegramMiniApp.value) {
-      try {
-        window.Telegram?.WebApp?.openLink?.(payLink.value)
-      } catch {
-        window.open(payLink.value, '_blank')
-      }
-    } else if (resolvePaymentLinkNavigationTarget(automatic) === 'current-tab') {
-      window.location.assign(payLink.value)
-    } else {
-      window.open(payLink.value, '_blank')
-    }
+    payLinkError.value = ''
+    const result = openResolvedPaymentLink({
+      url: payLink.value,
+      automatic,
+      telegram: isTelegramMiniApp.value,
+      openTelegram: (url) => {
+        window.Telegram?.WebApp?.openLink?.(url)
+      },
+      assign: (url) => {
+        window.location.assign(url)
+      },
+      openWindow: (url) => {
+        const opened = window.open('', '_blank')
+        if (!opened) return false
+        opened.opener = null
+        opened.location.replace(url)
+        return true
+      },
+    })
+    if (result === 'opened') return
+    payLinkError.value = result === 'blocked' ? t('payment.payLinkBlocked') : t('payment.payLinkRejected')
   }
 
   const handleOpenPayLink = () => {
@@ -312,6 +322,7 @@ export function useRechargeOrderDetail() {
     qrImageUrl,
     isPending,
     payLink,
+    payLinkError,
     showTelegramPayHint,
     qrUsingPayLinkFallback,
     showQRCode,
