@@ -52,10 +52,7 @@
             <li v-for="(item, index) in snapshot.news.items" :key="`${item.title}-${index}`" class="rounded-2xl bg-secondary/60 p-4">
               <h3 class="text-sm font-semibold leading-6">{{ item.title }}</h3>
               <p v-if="item.summary" class="mt-1 text-sm leading-6 text-muted-foreground">{{ item.summary }}</p>
-              <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                <span v-if="item.source">{{ item.source }}</span>
-                <span v-if="item.updated_at">{{ beijing(item.updated_at) }}</span>
-              </div>
+              <p v-if="item.updated_at" class="mt-2 text-xs text-muted-foreground">{{ beijing(item.updated_at) }}</p>
             </li>
           </ul>
           <p v-else class="mt-3 text-sm text-muted-foreground">{{ t('feed.noNews') }}</p>
@@ -71,7 +68,6 @@
               <span class="w-6 shrink-0 text-sm font-bold">{{ index + 1 }}</span>
               <div class="min-w-0">
                 <h3 class="text-sm font-semibold leading-6">{{ item.title }}</h3>
-                <p v-if="item.source" class="mt-1 text-xs text-muted-foreground">{{ item.source }}</p>
               </div>
             </li>
           </ol>
@@ -83,11 +79,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { aiFeedAPI } from '../api/aiFeed'
 import { Button } from '@/components/ui/button'
 import ResetCalendar from '../components/ResetCalendar.vue'
+import { createFeedRefresh } from '../utils/feedRefresh'
 
 type FeedItem = {
   title: string
@@ -182,9 +179,15 @@ const statusText = (section?: FeedStatus) => {
   return t('feed.statusWithTime', { status, time: beijing(section.fetched_at) })
 }
 
-const load = async () => {
-  loading.value = true
-  loadError.value = false
+let reading = false
+
+const load = async (quiet = false) => {
+  if (reading) return
+  reading = true
+  if (!quiet) {
+    loading.value = true
+    loadError.value = false
+  }
   try {
     const response = await aiFeedAPI.get()
     const data = response.data?.data
@@ -196,13 +199,34 @@ const load = async () => {
       daily: data?.daily || { status: 'empty' },
       resets: Array.isArray(data?.resets) ? data.resets.map((group: ResetGroup) => ({ ...group, events: Array.isArray(group.events) ? group.events : [] })) : [],
     }
+    loadError.value = false
   } catch {
-    loadError.value = true
-    snapshot.value = null
+    if (!snapshot.value) {
+      loadError.value = true
+      snapshot.value = null
+    }
   } finally {
+    reading = false
     loading.value = false
   }
 }
 
-onMounted(load)
+let stopRefresh = () => {}
+
+onMounted(() => {
+  void load()
+  const refresh = createFeedRefresh({
+    reload: () => { void load(true) },
+    hidden: () => document.visibilityState === 'hidden',
+  })
+  refresh.start()
+  const onVisibility = () => refresh.onVisibility()
+  document.addEventListener('visibilitychange', onVisibility)
+  stopRefresh = () => {
+    document.removeEventListener('visibilitychange', onVisibility)
+    refresh.stop()
+  }
+})
+
+onBeforeUnmount(() => stopRefresh())
 </script>

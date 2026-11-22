@@ -29,6 +29,9 @@ func BuildRunner(cfg *config.Config, mode string) (*Runner, error) {
 		addr := cfg.Server.Host + ":" + cfg.Server.Port
 		httpService := NewHTTPService(addr, engine)
 		services = append(services, httpService)
+		if dependencies.AIFeedService != nil {
+			services = append(services, newAIFeedSync(dependencies.AIFeedService))
+		}
 	}
 
 	// 初始化 Worker 服务

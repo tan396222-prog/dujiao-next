@@ -220,7 +220,9 @@ func TestRedirectToAnotherHostIsNotFollowed(t *testing.T) {
 }
 
 func TestResetCalendarKeepsTypeAndDropsPosts(t *testing.T) {
-	// Fixture, not a live capture. The dates exercise the public calendar rule.
+	// Fixture, not a live capture. Only occurredOn on or before the pinned day
+	// is a circle. Confirmation time, publication time, createdAt, and a
+	// schedule window are not.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
 			"schemaVersion":1,
@@ -236,6 +238,7 @@ func TestResetCalendarKeepsTypeAndDropsPosts(t *testing.T) {
 					"status":"confirmed",
 					"confirmedAt":"2026-11-01T17:18:00+08:00",
 					"occurredOn":null,
+					"createdAt":"2026-11-01T17:18:00+08:00",
 					"schedule":{"precision":"deadline","from":"2026-11-02T00:00:00+08:00","through":"2026-11-02T00:00:00+08:00","label":"11-02"},
 					"estimate":{"label":"模型窗口"},
 					"presentation":{"status":"confirmed","scopeLabel":"Codex"},
@@ -251,6 +254,19 @@ func TestResetCalendarKeepsTypeAndDropsPosts(t *testing.T) {
 					"schedule":{"precision":"date","from":"2026-11-20T16:00:00Z","through":"2026-11-21T15:59:00Z"},
 					"presentation":{"status":"confirmed"},
 					"posts":[{"publishedAt":"2026-11-22T01:00:00Z","text":"另一段正文"}]
+				},
+				{
+					"id":"card-occurred",
+					"type":"reset_credit",
+					"occurredOn":"2026-09-23",
+					"confirmedAt":"2026-09-24T01:00:00+08:00",
+					"presentation":{"status":"likely_completed"}
+				},
+				{
+					"id":"future-occurred",
+					"type":"direct_reset",
+					"occurredOn":"2026-11-23",
+					"presentation":{"status":"confirmed"}
 				},
 				{
 					"id":"published-only",
@@ -270,6 +286,7 @@ func TestResetCalendarKeepsTypeAndDropsPosts(t *testing.T) {
 					"id":"no-type",
 					"title":"维护公告",
 					"confirmedAt":"2026-11-18T09:00:00+08:00",
+					"createdAt":"2026-11-18T09:00:00+08:00",
 					"posts":[{"text":"这不是重置"}]
 				},
 				{
@@ -284,14 +301,12 @@ func TestResetCalendarKeepsTypeAndDropsPosts(t *testing.T) {
 	defer server.Close()
 	service := resetTestService(t, server.URL, time.Minute)
 	section := service.Snapshot(context.Background()).Resets[0]
-	if len(section.Events) != 4 {
+	if len(section.Events) != 2 {
 		t.Fatalf("events = %+v", section.Events)
 	}
 	want := []aifeedcontract.ResetEvent{
-		{Kind: aifeedcontract.ResetKindCard, Status: aifeedcontract.ResetStatusEffective, Date: "2026-11-01"},
 		{Kind: aifeedcontract.ResetKindQuota, Status: aifeedcontract.ResetStatusEffective, Date: "2026-11-21"},
-		{Kind: aifeedcontract.ResetKindQuota, Status: aifeedcontract.ResetStatusEffective, Date: "2026-10-23"},
-		{Kind: aifeedcontract.ResetKindCard, Status: aifeedcontract.ResetStatusUnconfirmed, Date: "2026-11-09"},
+		{Kind: aifeedcontract.ResetKindCard, Status: aifeedcontract.ResetStatusEffective, Date: "2026-09-23"},
 	}
 	for index, event := range want {
 		if section.Events[index] != event {
@@ -389,6 +404,223 @@ func TestFullSnapshotRemovesWithdrawnEvent(t *testing.T) {
 	}
 }
 
+func TestCorrectedOccurrenceReplacesTheOldDay(t *testing.T) {
+	var phase atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if phase.Add(1) == 1 {
+			_, _ = w.Write([]byte(`{
+				"schemaVersion":1,"historyFrom":"2026-04-15T00:00:00.000+08:00",
+				"events":[
+					{"id":"same","type":"direct_reset","occurredOn":"2026-09-04","presentation":{"status":"confirmed"}}
+				]
+			}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{
+			"schemaVersion":1,"historyFrom":"2026-04-15T00:00:00.000+08:00",
+			"events":[
+				{"id":"same","type":"reset_credit","occurredOn":"2026-09-05","presentation":{"status":"confirmed"}},
+				{"id":"added","type":"direct_reset","occurredOn":"2026-11-02","presentation":{"status":"confirmed"}}
+			]
+		}`))
+	}))
+	defer server.Close()
+	service := resetTestService(t, server.URL, 0)
+	first := service.Snapshot(context.Background()).Resets[0].Events
+	if len(first) != 1 || first[0].Date != "2026-09-04" || first[0].Kind != aifeedcontract.ResetKindQuota {
+		t.Fatalf("first = %+v", first)
+	}
+	second := service.Snapshot(context.Background()).Resets[0].Events
+	if len(second) != 2 || second[0].Date != "2026-09-05" || second[0].Kind != aifeedcontract.ResetKindCard || second[1].Date != "2026-11-02" {
+		t.Fatalf("correction = %+v", second)
+	}
+}
+
+func TestSyncScheduleDisableCancelAndSingleRunner(t *testing.T) {
+	hits := atomic.Int32{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Retry-After", "1800")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+	now := time.Date(2026, 11, 22, 12, 0, 0, 0, shanghai)
+	enabled := atomic.Bool{}
+	enabled.Store(true)
+	recorded := make(chan time.Duration, 4)
+	release := make(chan struct{})
+	service := NewService(Options{
+		Now:     func() time.Time { return now },
+		Enabled: func() bool { return enabled.Load() },
+		Wait: func(ctx context.Context, delay time.Duration) bool {
+			recorded <- delay
+			select {
+			case <-ctx.Done():
+				return false
+			case <-release:
+				return true
+			}
+		},
+		Sources: []source{{
+			Key: "codex", Kind: kindReset, Provider: "codex", URL: server.URL,
+			TTL: 10 * time.Minute, MinGap: 10 * time.Minute,
+		}},
+	})
+	service.allowTestHosts = true
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		_ = service.Run(ctx)
+		close(done)
+	}()
+	first := <-recorded
+	if first < 30*time.Minute {
+		t.Fatalf("retry delay = %s", first)
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("hits = %d", hits.Load())
+	}
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	done2 := make(chan struct{})
+	go func() {
+		_ = service.Run(ctx2)
+		close(done2)
+	}()
+	cancel2()
+	select {
+	case <-done2:
+	case <-time.After(2 * time.Second):
+		t.Fatal("second runner did not stop")
+	}
+	if hits.Load() != 1 {
+		t.Fatalf("second runner fetched: %d", hits.Load())
+	}
+	release <- struct{}{}
+	second := <-recorded
+	if hits.Load() != 1 {
+		t.Fatalf("retried before retry-after: %d", hits.Load())
+	}
+	if second < 30*time.Minute {
+		t.Fatalf("second delay = %s", second)
+	}
+	enabled.Store(false)
+	release <- struct{}{}
+	third := <-recorded
+	if hits.Load() != 1 {
+		t.Fatalf("disabled runner fetched: %d", hits.Load())
+	}
+	if third < resetSyncFloor {
+		t.Fatalf("disabled delay = %s", third)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancel did not stop the loop")
+	}
+}
+
+func TestSyncFloorAndLongRetryAfter(t *testing.T) {
+	for _, tc := range []struct {
+		header string
+		want   time.Duration
+	}{
+		{header: "30", want: 10 * time.Minute},
+		{header: "7200", want: 2 * time.Hour},
+	} {
+		t.Run(tc.header, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Retry-After", tc.header)
+				w.WriteHeader(http.StatusTooManyRequests)
+			}))
+			defer server.Close()
+			var got time.Duration
+			now := time.Date(2026, 11, 22, 12, 0, 0, 0, shanghai)
+			service := NewService(Options{
+				Now: func() time.Time { return now },
+				Wait: func(_ context.Context, delay time.Duration) bool {
+					got = delay
+					return false
+				},
+				Sources: []source{{
+					Key: "codex", Kind: kindReset, Provider: "codex", URL: server.URL,
+					TTL: 10 * time.Minute, MinGap: 10 * time.Minute,
+				}},
+			})
+			service.allowTestHosts = true
+			if err := service.Run(context.Background()); err != nil {
+				t.Fatal(err)
+			}
+			if got < tc.want {
+				t.Fatalf("delay = %s, want at least %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestSyncDisabledDoesNotFetch(t *testing.T) {
+	hits := atomic.Int32{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	service := NewService(Options{
+		Enabled: func() bool { return false },
+		Wait: func(context.Context, time.Duration) bool {
+			return false
+		},
+		Sources: []source{{
+			Key: "codex", Kind: kindReset, Provider: "codex", URL: server.URL, TTL: 10 * time.Minute,
+		}},
+	})
+	service.allowTestHosts = true
+	if err := service.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("hits = %d", hits.Load())
+	}
+}
+
+func TestSyncFailureKeepsHistory(t *testing.T) {
+	var phase atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if phase.Add(1) == 1 {
+			_, _ = w.Write([]byte(`{
+				"schemaVersion":1,"historyFrom":"2026-04-15T00:00:00.000+08:00",
+				"events":[{"id":"kept","type":"direct_reset","occurredOn":"2026-08-11","presentation":{"status":"confirmed"}}]
+			}`))
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+	now := time.Date(2026, 11, 22, 12, 0, 0, 0, shanghai)
+	passes := atomic.Int32{}
+	service := NewService(Options{
+		Now: func() time.Time { return now },
+		Wait: func(context.Context, time.Duration) bool {
+			return passes.Add(1) < 2
+		},
+		Sources: []source{{
+			Key: "codex", Kind: kindReset, Provider: "codex", URL: server.URL, TTL: 0, MinGap: 10 * time.Minute,
+		}},
+	})
+	service.allowTestHosts = true
+	if err := service.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	section := service.Snapshot(context.Background()).Resets[0]
+	if !section.Stale || len(section.Events) != 1 || section.Events[0].Date != "2026-08-11" {
+		t.Fatalf("history = %+v", section)
+	}
+	if phase.Load() != 2 {
+		t.Fatalf("fetches = %d", phase.Load())
+	}
+}
+
 func TestLiveAllowlistedSchema(t *testing.T) {
 	if os.Getenv("AIHOT_LIVE") != "1" {
 		t.Skip("set AIHOT_LIVE=1 to call the public AIHOT API")
@@ -432,9 +664,13 @@ func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func resetTestService(t *testing.T, rawURL string, ttl time.Duration) *Service {
 	t.Helper()
-	service := NewService(Options{Sources: []source{{
-		Key: "codex", Kind: kindReset, Provider: "codex", URL: rawURL, TTL: ttl,
-	}}})
+	now := time.Date(2026, 11, 22, 12, 0, 0, 0, shanghai)
+	service := NewService(Options{
+		Now: func() time.Time { return now },
+		Sources: []source{{
+			Key: "codex", Kind: kindReset, Provider: "codex", URL: rawURL, TTL: ttl,
+		}},
+	})
 	service.allowTestHosts = true
 	return service
 }

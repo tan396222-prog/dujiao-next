@@ -36,12 +36,12 @@ const isDate = (value?: string): value is string => {
 const isKind = (value?: string): value is ResetKind => kinds.has(value as ResetKind)
 const isStatus = (value?: string): value is ResetStatus => statuses.has(value as ResetStatus)
 
-// Facts come only from a typed calendar date. Titles, post text, links and
-// timestamps are ignored even if an older payload still carries them.
-export const resetFacts = (events: ResetCalendarEvent[]): Map<string, ResetLine[]> => {
+// Facts come only from a typed calendar date on or before today. A later day
+// is not circled. Titles, post text, links and timestamps are ignored.
+export const resetFacts = (events: ResetCalendarEvent[], today = shanghaiToday().date): Map<string, ResetLine[]> => {
   const grouped = new Map<string, Map<string, ResetLine>>()
   for (const event of events) {
-    if (!isDate(event.date) || !isKind(event.kind) || !isStatus(event.status)) continue
+    if (!isDate(event.date) || event.date > today || !isKind(event.kind) || !isStatus(event.status)) continue
     const lines = grouped.get(event.date) ?? new Map<string, ResetLine>()
     const key = `${event.kind}:${event.status}`
     const current = lines.get(key) ?? { kind: event.kind, status: event.status, count: 0 }

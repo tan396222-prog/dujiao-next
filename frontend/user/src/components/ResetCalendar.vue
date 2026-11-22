@@ -2,7 +2,7 @@
   <article class="theme-float rounded-[22px] bg-card p-4 sm:p-5" :data-provider="group.provider">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <h3 class="text-base font-bold">{{ providerName }}</h3>
-      <span class="text-xs text-muted-foreground">{{ statusText }}</span>
+      <span class="text-xs text-muted-foreground" data-reset-sync>{{ statusText }}</span>
     </div>
 
     <div class="mt-3 flex items-center gap-2">
@@ -88,7 +88,7 @@ const month = ref(today.month)
 const selected = ref('')
 const todayDate = computed(() => shanghaiToday().date)
 
-const facts = computed(() => resetFacts(props.group.events || []))
+const facts = computed(() => resetFacts(props.group.events || [], todayDate.value))
 const cells = computed(() => monthGrid(year.value, month.value))
 const counts = computed(() => monthCounts(facts.value, year.value, month.value))
 const monthHasMark = computed(() => cells.value.some((cell) => cell.date && facts.value.has(cell.date)))

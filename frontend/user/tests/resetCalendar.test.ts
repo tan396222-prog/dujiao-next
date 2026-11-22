@@ -15,7 +15,7 @@ test('calendar facts keep type and status and ignore posts', () => {
     { kind: 'quota_reset', status: 'effective', date: '2026-02-31' },
     { kind: 'maintenance', status: 'effective', date: '2026-11-18', title: '帖子正文', url: 'https://x.com/example' },
     { date: '2026-11-19', announced_at: '2026-11-19T09:00:00+08:00' },
-  ])
+  ], '2026-11-22')
   assert.equal(dayKind(facts.get('2026-11-01')), 'reset_credit')
   assert.equal(dayKind(facts.get('2026-10-26')), 'quota_reset')
   assert.equal(dayKind(facts.get('2026-11-13')), 'mixed')
@@ -28,6 +28,15 @@ test('calendar facts keep type and status and ignore posts', () => {
   const mixed = facts.get('2026-11-13') || []
   assert.equal(mixed.find((line) => line.kind === 'reset_credit')?.count, 1)
   assert.equal(mixed.find((line) => line.kind === 'quota_reset')?.status, 'announced')
+})
+
+test('a future day is not circled', () => {
+  const facts = resetFacts([
+    { kind: 'quota_reset', status: 'effective', date: '2026-11-23' },
+    { kind: 'reset_credit', status: 'effective', date: '2026-11-22' },
+  ], '2026-11-22')
+  assert.equal(facts.has('2026-11-23'), false)
+  assert.equal(dayKind(facts.get('2026-11-22')), 'reset_credit')
 })
 
 test('an empty calendar stays unmarked', () => {

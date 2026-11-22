@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -33,6 +34,7 @@ const (
 	resetLimit      = 400
 	refusalHold     = 6 * time.Hour
 	backoffCap      = time.Hour
+	resetSyncFloor  = 10 * time.Minute
 	userAgent       = "dujiao-storefront-feed/1 (+https://aihot.news/terms)"
 )
 
@@ -61,6 +63,8 @@ type Options struct {
 	Client  *http.Client
 	Enabled func() bool
 	Sources []source
+	// Wait replaces the sync sleep in tests. Production leaves it nil.
+	Wait func(context.Context, time.Duration) bool
 }
 
 // Service caches allowlisted public responses and never accepts a caller-supplied URL.
@@ -68,8 +72,10 @@ type Service struct {
 	now            func() time.Time
 	client         *http.Client
 	enabled        func() bool
+	waitFn         func(context.Context, time.Duration) bool
 	sources        []source
 	allowTestHosts bool
+	running        atomic.Bool
 
 	mu      sync.Mutex
 	entries map[string]*cached
@@ -142,6 +148,7 @@ func NewService(opts Options) *Service {
 		now:     now,
 		client:  client,
 		enabled: opts.Enabled,
+		waitFn:  opts.Wait,
 		sources: sources,
 		entries: map[string]*cached{},
 		flights: map[string]*flight{},
@@ -199,6 +206,84 @@ func (s *Service) Snapshot(ctx context.Context) aifeedcontract.Snapshot {
 		}
 	}
 	return snapshot
+}
+
+// Run refreshes the allowlisted sources until ctx is cancelled. One loop is
+// enough for the process: a second call waits on ctx and does not fetch.
+// The wait is never shorter than 10 minutes, and a 429 Retry-After that is
+// longer wins. Disable skips the fetch but leaves the loop stoppable.
+func (s *Service) Run(ctx context.Context) error {
+	if s == nil {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if !s.running.CompareAndSwap(false, true) {
+		<-ctx.Done()
+		return nil
+	}
+	defer s.running.Store(false)
+	for {
+		if ctx.Err() != nil {
+			return nil
+		}
+		if s.enabled == nil || s.enabled() {
+			s.sync(ctx)
+		}
+		if !s.wait(ctx, s.nextSyncDelay()) {
+			return nil
+		}
+	}
+}
+
+func (s *Service) sync(ctx context.Context) {
+	var group sync.WaitGroup
+	for _, src := range s.sources {
+		group.Add(1)
+		go func(src source) {
+			defer group.Done()
+			s.load(ctx, src)
+		}(src)
+	}
+	group.Wait()
+}
+
+func (s *Service) nextSyncDelay() time.Duration {
+	delay := resetSyncFloor
+	now := s.now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, src := range s.sources {
+		if src.Kind != kindReset {
+			continue
+		}
+		entry := s.entries[src.Key]
+		if entry == nil || entry.readyAt.IsZero() {
+			continue
+		}
+		if wait := entry.readyAt.Sub(now); wait > delay {
+			delay = wait
+		}
+	}
+	return delay
+}
+
+func (s *Service) wait(ctx context.Context, delay time.Duration) bool {
+	if s.waitFn != nil {
+		return s.waitFn(ctx, delay)
+	}
+	if delay < 0 {
+		delay = 0
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
 }
 
 func (s *Service) load(ctx context.Context, src source) *cached {
@@ -297,7 +382,7 @@ func (s *Service) fetch(ctx context.Context, src source, etag string) *cached {
 			logger.Warnw("ai_feed_body_rejected", "source", src.Key)
 			return hold(previous, aifeedcontract.StatusUnavailable, s.backoff(previous, src, 0))
 		}
-		parsedBody, ok := parseSource(src, body)
+		parsedBody, ok := parseSource(src, body, shanghaiDate(s.now()))
 		if !ok {
 			logger.Warnw("ai_feed_schema_rejected", "source", src.Key)
 			return hold(previous, aifeedcontract.StatusUnavailable, s.backoff(previous, src, 0))
@@ -340,8 +425,7 @@ func (s *Service) backoff(previous *cached, src source, retryAfter time.Duration
 	}
 	if retryAfter > wait {
 		wait = retryAfter
-	}
-	if wait > backoffCap {
+	} else if wait > backoffCap {
 		wait = backoffCap
 	}
 	next := s.now().Add(wait)
@@ -416,7 +500,7 @@ func okStatus(entry *cached) string {
 	return aifeedcontract.StatusOK
 }
 
-func parseSource(src source, body []byte) (*cached, bool) {
+func parseSource(src source, body []byte, today string) (*cached, bool) {
 	var payload map[string]any
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return nil, false
@@ -448,7 +532,7 @@ func parseSource(src source, body []byte) (*cached, bool) {
 		}
 		return &cached{status: status, daily: daily}, true
 	case kindReset:
-		records, checkedAt, historyFrom, ok := parseResets(payload)
+		records, checkedAt, historyFrom, ok := parseResets(payload, today)
 		if !ok {
 			return nil, false
 		}
@@ -518,7 +602,7 @@ func parseDaily(raw any) (aifeedcontract.DailySection, bool) {
 	}, true
 }
 
-func parseResets(payload map[string]any) ([]resetRecord, string, string, bool) {
+func parseResets(payload map[string]any, today string) ([]resetRecord, string, string, bool) {
 	rows, ok := payload["events"].([]any)
 	if !ok {
 		return nil, "", "", false
@@ -533,9 +617,8 @@ func parseResets(payload map[string]any) ([]resetRecord, string, string, bool) {
 			continue
 		}
 		kind := calendarKind(asString(record["type"]))
-		day := calendarDay(record)
-		status := calendarStatus(record)
-		if kind == "" || day == "" || status == "" {
+		day := occurredOnDay(record, today)
+		if kind == "" || day == "" {
 			continue
 		}
 		records = append(records, resetRecord{
@@ -543,7 +626,7 @@ func parseResets(payload map[string]any) ([]resetRecord, string, string, bool) {
 			sourceURL: asString(record["url"]),
 			event: aifeedcontract.ResetEvent{
 				Kind:   kind,
-				Status: status,
+				Status: aifeedcontract.ResetStatusEffective,
 				Date:   day,
 			},
 		})
@@ -562,64 +645,17 @@ func calendarKind(raw string) string {
 	}
 }
 
-func calendarStatus(record map[string]any) string {
-	presented := ""
-	if presentation, ok := record["presentation"].(map[string]any); ok {
-		presented = asString(presentation["status"])
-	}
-	switch presented {
-	case "confirmed", "likely_completed":
-		return aifeedcontract.ResetStatusEffective
-	case "announced", "in_progress":
-		return aifeedcontract.ResetStatusAnnounced
-	case "expired_unconfirmed":
-		return aifeedcontract.ResetStatusUnconfirmed
-	}
-	switch asString(record["status"]) {
-	case "confirmed":
-		return aifeedcontract.ResetStatusEffective
-	case "announced":
-		return aifeedcontract.ResetStatusAnnounced
-	default:
+// occurredOnDay keeps only the upstream's separately verified Beijing day.
+// confirmedAt is the confirmation post time, not an execution time. schedule
+// is the original estimate and is never an execution receipt. publishedAt,
+// createdAt, updatedAt, and checkedAt are record times. A day after today is
+// not circled.
+func occurredOnDay(record map[string]any, today string) string {
+	day := beijingCalendarDate(asString(record["occurredOn"]))
+	if day == "" || today == "" || day > today {
 		return ""
 	}
-}
-
-// calendarDay follows the public calendar: a verified occurredOn day wins.
-// Otherwise the Beijing day of confirmedAt, then the newest post's published
-// day, then a schedule that names exactly one Beijing day. A model estimate
-// and a multi-day window are not a reset day. The chosen day is a fact used
-// for the circle; the post itself is not published.
-func calendarDay(record map[string]any) string {
-	if day := beijingCalendarDate(asString(record["occurredOn"])); day != "" {
-		return day
-	}
-	if day := beijingTimestampDate(asString(record["confirmedAt"])); day != "" {
-		return day
-	}
-	if posts, ok := record["posts"].([]any); ok && len(posts) > 0 {
-		if post, ok := posts[0].(map[string]any); ok {
-			if day := beijingTimestampDate(asString(post["publishedAt"])); day != "" {
-				return day
-			}
-		}
-	}
-	if item, ok := record["schedule"].(map[string]any); ok {
-		return singleScheduleDay(asString(item["from"]), asString(item["through"]))
-	}
-	return ""
-}
-
-func singleScheduleDay(fromRaw, throughRaw string) string {
-	from := beijingTimestampDate(fromRaw)
-	through := beijingTimestampDate(throughRaw)
-	if from == "" {
-		return through
-	}
-	if through == "" || through == from {
-		return from
-	}
-	return ""
+	return day
 }
 
 // recentResetWindow is the short poll payload. Its historyFrom starts inside
@@ -679,9 +715,7 @@ func capResetRecords(records []resetRecord) []resetRecord {
 
 var shanghai = time.FixedZone("Asia/Shanghai", 8*60*60)
 
-// beijingCalendarDate accepts only a verified YYYY-MM-DD day. A timestamp is
-// not accepted here; callers that mean a confirmation or publication instant
-// use beijingTimestampDate and say so.
+// beijingCalendarDate accepts only a YYYY-MM-DD day. A timestamp is not a day.
 func beijingCalendarDate(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if len(raw) != 10 {
@@ -694,16 +728,11 @@ func beijingCalendarDate(raw string) string {
 	return raw
 }
 
-func beijingTimestampDate(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || len(raw) == 10 {
+func shanghaiDate(now time.Time) string {
+	if now.IsZero() {
 		return ""
 	}
-	parsed, err := time.Parse(time.RFC3339Nano, raw)
-	if err != nil {
-		return ""
-	}
-	return parsed.In(shanghai).Format("2006-01-02")
+	return now.In(shanghai).Format("2006-01-02")
 }
 
 func itemSection(entry *cached, limit int) aifeedcontract.ItemSection {
