@@ -8,6 +8,7 @@ import (
 	userdomain "github.com/dujiao-next/internal/modules/identity/user/domain"
 
 	"github.com/dujiao-next/internal/constants"
+	"github.com/dujiao-next/internal/i18n"
 	captcha "github.com/dujiao-next/internal/modules/captcha/contract"
 	captchahttp "github.com/dujiao-next/internal/modules/captcha/transport/http"
 	userpresenter "github.com/dujiao-next/internal/modules/identity/userauth/transport/presenter"
@@ -21,6 +22,7 @@ var (
 	ErrAgreementRequired  = errors.New("agreement required")
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrEmailNotVerified   = errors.New("email not verified")
+	ErrEmailLoginRejected = errors.New("email login rejected")
 )
 
 // UserLoginSettings 是注册端点所需的设置端口。
@@ -33,6 +35,8 @@ type UserLoginSettings interface {
 type UserLoginAuth interface {
 	Register(ctx context.Context, email, password, code, inviteCode string, agreementAccepted, emailVerificationEnabled bool) (*userdomain.User, string, time.Time, error)
 	LoginStep1(ctx context.Context, email, password string, rememberMe bool) (*AuthLoginResult, error)
+	SendLoginEmailCode(ctx context.Context, email, locale string) error
+	LoginWithEmailCode(ctx context.Context, email, code string, rememberMe bool) (*AuthLoginResult, error)
 }
 
 // UserLoginHandler 处理公开的注册与登录 HTTP 请求。
@@ -206,6 +210,131 @@ func (h *UserLoginHandler) UserLogin(c *gin.Context) {
 		"token":         res.Token,
 		"expires_at":    res.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
 	})
+}
+
+type UserSendLoginEmailCodeRequest struct {
+	Email          string                            `json:"email" binding:"required"`
+	CaptchaPayload captchahttp.CaptchaPayloadRequest `json:"captcha_payload"`
+}
+
+type UserLoginEmailCodeRequest struct {
+	Email          string                            `json:"email" binding:"required"`
+	Code           string                            `json:"code" binding:"required"`
+	RememberMe     bool                              `json:"remember_me"`
+	CaptchaPayload captchahttp.CaptchaPayloadRequest `json:"captcha_payload"`
+}
+
+func (h *UserLoginHandler) rejectLoginCaptcha(c *gin.Context, email string, payload captchahttp.CaptchaPayloadRequest) bool {
+	if h == nil || h.captcha == nil {
+		return false
+	}
+	captchaErr := h.captcha.Verify(constants.CaptchaSceneLogin, payload, c.ClientIP())
+	if captchaErr == nil {
+		return false
+	}
+	switch {
+	case errors.Is(captchaErr, captcha.ErrRequired):
+		h.recordLogin(c, email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonCaptchaRequired, constants.LoginLogSourceWeb)
+		ginutil.RespondError(c, response.CodeBadRequest, "error.captcha_required", nil)
+	case errors.Is(captchaErr, captcha.ErrInvalid):
+		h.recordLogin(c, email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonCaptchaInvalid, constants.LoginLogSourceWeb)
+		ginutil.RespondError(c, response.CodeBadRequest, "error.captcha_invalid", nil)
+	case errors.Is(captchaErr, captcha.ErrConfigInvalid):
+		h.recordLogin(c, email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonCaptchaConfigInvalid, constants.LoginLogSourceWeb)
+		ginutil.RespondError(c, response.CodeInternal, "error.captcha_config_invalid", captchaErr)
+	default:
+		h.recordLogin(c, email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonCaptchaVerifyFailed, constants.LoginLogSourceWeb)
+		ginutil.RespondError(c, response.CodeInternal, "error.captcha_verify_failed", captchaErr)
+	}
+	return true
+}
+
+func (h *UserLoginHandler) respondAuthenticatedLogin(c *gin.Context, res *AuthLoginResult) {
+	if res.RequiresTOTP {
+		h.recordLogin(c, res.User.Email, res.User.ID, constants.LoginLogStatusSuccess, constants.LoginLogPasswordOK2FAPending, constants.LoginLogSourceWeb)
+		response.Success(c, gin.H{
+			"requires_totp":        true,
+			"challenge_token":      res.ChallengeToken,
+			"challenge_expires_at": res.ChallengeExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
+		})
+		return
+	}
+	h.recordLogin(c, res.User.Email, res.User.ID, constants.LoginLogStatusSuccess, "", constants.LoginLogSourceWeb)
+	response.Success(c, gin.H{
+		"requires_totp": false,
+		"user":          userpresenter.NewUserAuthBriefResp(res.User),
+		"token":         res.Token,
+		"expires_at":    res.ExpiresAt.Format("2006-01-02T15:04:05Z07:00"),
+	})
+}
+
+// UserSendLoginEmailCode 发送登录验证码。未配置邮件时返回真实错误，不把缺失账号说成发送失败。
+func (h *UserLoginHandler) UserSendLoginEmailCode(c *gin.Context) {
+	var req UserSendLoginEmailCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		ginutil.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
+		return
+	}
+	if h.rejectLoginCaptcha(c, req.Email, req.CaptchaPayload) {
+		return
+	}
+	if err := h.auth.SendLoginEmailCode(c.Request.Context(), req.Email, i18n.ResolveLocale(c)); err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidEmail):
+			ginutil.RespondError(c, response.CodeBadRequest, "error.email_invalid", nil)
+		case errors.Is(err, ErrVerifyCodeTooFrequent):
+			ginutil.RespondError(c, response.CodeTooManyRequests, "error.verify_code_too_frequent", nil)
+		case errors.Is(err, ErrEmailRecipientRejected):
+			ginutil.RespondError(c, response.CodeBadRequest, "error.email_recipient_not_found", nil)
+		case errors.Is(err, ErrEmailServiceDisabled), errors.Is(err, ErrEmailServiceNotConfigured):
+			ginutil.RespondError(c, response.CodeInternal, "error.email_service_not_configured", err)
+		default:
+			ginutil.RespondError(c, response.CodeInternal, "error.send_verify_code_failed", err)
+		}
+		return
+	}
+	response.Success(c, gin.H{"sent": true})
+}
+
+// UserLoginWithEmailCode 使用登录验证码登录。错误、过期、次数用尽、停用和不存在账号使用同一回包。
+func (h *UserLoginHandler) UserLoginWithEmailCode(c *gin.Context) {
+	var req UserLoginEmailCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.recordLogin(c, req.Email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonBadRequest, constants.LoginLogSourceWeb)
+		ginutil.RespondError(c, response.CodeBadRequest, "error.bad_request", err)
+		return
+	}
+	if h.rejectLoginCaptcha(c, req.Email, req.CaptchaPayload) {
+		return
+	}
+	res, err := h.auth.LoginWithEmailCode(c.Request.Context(), req.Email, req.Code, req.RememberMe)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrInvalidEmail):
+			h.recordLogin(c, req.Email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonInvalidEmail, constants.LoginLogSourceWeb)
+			ginutil.RespondError(c, response.CodeBadRequest, "error.email_invalid", nil)
+		case errors.Is(err, ErrVerifyCodeInvalid),
+			errors.Is(err, ErrVerifyCodeExpired),
+			errors.Is(err, ErrVerifyCodeAttemptsExceeded),
+			errors.Is(err, ErrEmailLoginRejected),
+			errors.Is(err, ErrUserNotFound),
+			errors.Is(err, ErrUserDisabled),
+			errors.Is(err, ErrEmailNotVerified),
+			errors.Is(err, ErrInvalidCredentials):
+			h.recordLogin(c, req.Email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonEmailLoginInvalid, constants.LoginLogSourceWeb)
+			ginutil.RespondError(c, response.CodeUnauthorized, "error.email_login_invalid", nil)
+		default:
+			h.recordLogin(c, req.Email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonInternalError, constants.LoginLogSourceWeb)
+			ginutil.RespondError(c, response.CodeInternal, "error.login_failed", err)
+		}
+		return
+	}
+	if res == nil || res.User == nil {
+		h.recordLogin(c, req.Email, 0, constants.LoginLogStatusFailed, constants.LoginLogFailReasonInternalError, constants.LoginLogSourceWeb)
+		ginutil.RespondError(c, response.CodeInternal, "error.login_failed", errors.New("email login returned an empty result"))
+		return
+	}
+	h.respondAuthenticatedLogin(c, res)
 }
 
 var (

@@ -2,8 +2,11 @@ package application
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/dujiao-next/internal/telegramidentity"
@@ -285,6 +288,46 @@ func (s *Service) SendVerifyCode(ctx context.Context, email, purpose, locale, in
 	return s.sendVerifyCode(ctx, normalized, purpose, locale)
 }
 
+// SendLoginEmailCode 向已有可用账户发送登录验证码。
+// 未配置邮件、发信失败会返回真实错误。没有账户、停用、未验证或已注销时与成功发送使用同一结果，且不发信。
+func (s *Service) SendLoginEmailCode(ctx context.Context, email, locale string) error {
+	if err := s.emailDeliveryReady(); err != nil {
+		return err
+	}
+	normalized, err := normalizeEmail(email)
+	if err != nil {
+		return err
+	}
+	user, err := s.userRepo.GetByEmail(normalized)
+	if err != nil {
+		return err
+	}
+	if accountCanUseEmailLogin(user) && strings.TrimSpace(user.Locale) != "" {
+		locale = user.Locale
+	}
+	return s.issueLoginVerifyCode(ctx, normalized, locale, accountCanUseEmailLogin(user))
+}
+
+// LoginWithEmailCode 用登录用途验证码登录已有可用账户。
+// 注册、重置密码和更换邮箱的验证码不能用于这里。已启用两步验证时只返回挑战。
+func (s *Service) LoginWithEmailCode(email, code string, rememberMe bool) (*UserLoginResult, error) {
+	normalized, err := normalizeEmail(email)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.verifyCode(normalized, constants.VerifyPurposeLogin, code); err != nil {
+		return nil, err
+	}
+	user, err := s.userRepo.GetByEmail(normalized)
+	if err != nil {
+		return nil, err
+	}
+	if !accountCanUseEmailLogin(user) {
+		return nil, ErrEmailLoginRejected
+	}
+	return s.completeAuthenticatedLogin(user, rememberMe)
+}
+
 // Register 用户注册
 func (s *Service) Register(email, password, code, inviteCode string, agreementAccepted bool, emailVerificationEnabled bool) (*userdomain.User, string, time.Time, error) {
 	if !agreementAccepted {
@@ -386,15 +429,20 @@ func (s *Service) LoginStep1(email, password string, rememberMe bool) (*UserLogi
 		return nil, ErrInvalidCredentials
 	}
 
+	return s.completeAuthenticatedLogin(user, rememberMe)
+}
+
+// completeAuthenticatedLogin 在身份已经确认后签发会话。启用了两步验证时只发挑战，不发访问令牌。
+func (s *Service) completeAuthenticatedLogin(user *userdomain.User, rememberMe bool) (*UserLoginResult, error) {
 	if user.TOTPEnabledAt != nil {
-		challenge, jti, expiresAt, err := s.IssueUserChallengeToken(user.ID, rememberMe)
+		challengeToken, jti, expiresAt, err := s.IssueUserChallengeToken(user.ID, rememberMe)
 		if err != nil {
 			return nil, err
 		}
 		return &UserLoginResult{
 			RequiresTOTP:       true,
 			User:               user,
-			ChallengeToken:     challenge,
+			ChallengeToken:     challengeToken,
 			ChallengeJTI:       jti,
 			ChallengeExpiresAt: expiresAt,
 		}, nil
@@ -537,7 +585,12 @@ func (s *Service) verifyCode(email, purpose, code string) (*emailverificationdom
 		return nil, ErrVerifyCodeAttemptsExceeded
 	}
 
-	if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(record.Code)), []byte(strings.TrimSpace(code))) != 1 {
+	presented := strings.TrimSpace(code)
+	if record.Purpose == constants.VerifyPurposeLogin {
+		presented = s.loginCodeDigest(record.Email, presented)
+	}
+	stored := strings.TrimSpace(record.Code)
+	if subtle.ConstantTimeCompare([]byte(stored), []byte(presented)) != 1 {
 		return nil, ErrVerifyCodeInvalid
 	}
 
@@ -597,6 +650,122 @@ func (s *Service) sendVerifyCode(ctx context.Context, email, purpose, locale str
 	return nil
 }
 
+func (s *Service) issueLoginVerifyCode(ctx context.Context, email, locale string, deliver bool) error {
+	now := time.Now()
+	if err := s.rejectVerifySendInterval(email, constants.VerifyPurposeLogin, now); err != nil {
+		return err
+	}
+	code, err := randomNumericCode(resolveCodeLength(s.cfg.Email.VerifyCode))
+	if err != nil {
+		return err
+	}
+	record := &emailverificationdomain.Code{
+		Email:     email,
+		Purpose:   constants.VerifyPurposeLogin,
+		Code:      s.loginCodeDigest(email, code),
+		ExpiresAt: now.Add(time.Duration(resolveExpireMinutes(s.cfg.Email.VerifyCode)) * time.Minute),
+		SentAt:    now,
+		CreatedAt: now,
+	}
+	if err := s.codeRepo.Create(record); err != nil {
+		return err
+	}
+	if !deliver {
+		return nil
+	}
+	if err := s.deliverVerifyCode(ctx, email, code, constants.VerifyPurposeLogin, locale); err != nil {
+		_ = s.codeRepo.Delete(record.ID)
+		return err
+	}
+	return nil
+}
+
+func (s *Service) rejectVerifySendInterval(email, purpose string, now time.Time) error {
+	latest, err := s.codeRepo.GetLatest(email, purpose)
+	if err != nil {
+		return err
+	}
+	if latest == nil || latest.SentAt.IsZero() {
+		return nil
+	}
+	interval := time.Duration(resolveSendIntervalSeconds(s.cfg.Email.VerifyCode)) * time.Second
+	if now.Sub(latest.SentAt) < interval {
+		return ErrVerifyCodeTooFrequent
+	}
+	return nil
+}
+
+func (s *Service) deliverVerifyCode(ctx context.Context, email, code, purpose, locale string) error {
+	if s.emailService == nil {
+		return ErrEmailServiceNotConfigured
+	}
+	brand := mailbrand.Brand{}
+	if s.emailBrandResolver != nil {
+		resolved, err := s.emailBrandResolver.ResolveEmailBrand(ctx, mailbrand.Scope{})
+		if err != nil {
+			return err
+		}
+		brand = resolved
+	}
+	return s.emailService.SendVerifyCode(email, code, purpose, locale, brand)
+}
+
+func (s *Service) emailDeliveryReady() error {
+	if s == nil || s.emailService == nil || s.cfg == nil {
+		return ErrEmailServiceNotConfigured
+	}
+	cfg := s.cfg.Email
+	if s.settingService != nil {
+		setting, err := s.settingService.GetSMTPSetting(cfg)
+		if err != nil {
+			return err
+		}
+		cfg = settingsmessagingSMTPToEmail(setting.Enabled, setting.Host, setting.Port, setting.From)
+	}
+	if !cfg.Enabled || strings.TrimSpace(cfg.Host) == "" || cfg.Port == 0 || strings.TrimSpace(cfg.From) == "" {
+		return ErrEmailServiceNotConfigured
+	}
+	return nil
+}
+
+func settingsmessagingSMTPToEmail(enabled bool, host string, port int, from string) config.EmailConfig {
+	return config.EmailConfig{
+		Enabled: enabled,
+		Host:    strings.TrimSpace(host),
+		Port:    port,
+		From:    strings.TrimSpace(from),
+	}
+}
+
+func accountCanUseEmailLogin(user *userdomain.User) bool {
+	if user == nil || user.DeletedAt != nil {
+		return false
+	}
+	if strings.ToLower(strings.TrimSpace(user.Status)) != constants.UserStatusActive {
+		return false
+	}
+	if user.EmailVerifiedAt == nil {
+		return false
+	}
+	if telegramidentity.IsPlaceholderEmail(user.Email) {
+		return false
+	}
+	return true
+}
+
+func (s *Service) loginCodeDigest(email, code string) string {
+	secret := ""
+	if s != nil && s.cfg != nil {
+		secret = s.cfg.UserJWT.SecretKey
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte("email-login-code\n"))
+	_, _ = mac.Write([]byte(strings.ToLower(strings.TrimSpace(email))))
+	_, _ = mac.Write([]byte("\n"))
+	_, _ = mac.Write([]byte(strings.TrimSpace(code)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 func normalizeEmail(email string) (string, error) {
 	normalized := strings.ToLower(strings.TrimSpace(email))
 	if normalized == "" {
@@ -629,6 +798,7 @@ func NormalizeEmail(email string) (string, error) {
 // isVerifyPurposeSupported 判断公开发信入口（SendVerifyCode）是否接受该用途。
 // change_email_old / change_email_new 不在其中：它们只能由登录态的 SendChangeEmailCode
 // 在校验用户身份、换绑模式和新邮箱占用后发送，公开入口接受会让未登录者向任意邮箱发信。
+// login 同样不在其中，只能走 SendLoginEmailCode。
 func isVerifyPurposeSupported(purpose string) bool {
 	switch strings.ToLower(strings.TrimSpace(purpose)) {
 	case constants.VerifyPurposeRegister, constants.VerifyPurposeReset, constants.VerifyPurposeTelegramBind:

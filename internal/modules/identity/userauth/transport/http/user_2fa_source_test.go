@@ -3,6 +3,7 @@ package userauthhttp
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -113,5 +114,81 @@ func TestVerifyUser2FAPreservesExternalLoginSource(t *testing.T) {
 				t.Fatalf("login status = %q", loginRecorder.records[0].status)
 			}
 		})
+	}
+}
+
+type emailLoginHTTPSettings struct{}
+
+func (emailLoginHTTPSettings) GetRegistrationEnabled(bool) (bool, error) { return true, nil }
+func (emailLoginHTTPSettings) GetEmailVerificationEnabled(bool) (bool, error) {
+	return true, nil
+}
+
+type emailLoginHTTPAuth struct {
+	sendErr  error
+	loginErr error
+}
+
+func (emailLoginHTTPAuth) Register(context.Context, string, string, string, string, bool, bool) (*userdomain.User, string, time.Time, error) {
+	return nil, "", time.Time{}, nil
+}
+func (emailLoginHTTPAuth) LoginStep1(context.Context, string, string, bool) (*AuthLoginResult, error) {
+	return nil, nil
+}
+func (a emailLoginHTTPAuth) SendLoginEmailCode(context.Context, string, string) error {
+	return a.sendErr
+}
+func (a emailLoginHTTPAuth) LoginWithEmailCode(context.Context, string, string, bool) (*AuthLoginResult, error) {
+	return nil, a.loginErr
+}
+
+func TestEmailCodeLoginUsesOneClientError(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cases := []error{
+		ErrVerifyCodeInvalid,
+		ErrVerifyCodeExpired,
+		ErrVerifyCodeAttemptsExceeded,
+		ErrEmailLoginRejected,
+		ErrUserDisabled,
+		ErrUserNotFound,
+	}
+	var first string
+	for _, loginErr := range cases {
+		handler := NewUserLoginHandler(emailLoginHTTPSettings{}, emailLoginHTTPAuth{loginErr: loginErr}, nil, nil)
+		recorder := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(recorder)
+		ctx.Request = httptest.NewRequest(http.MethodPost, "/auth/login/email-code", bytes.NewBufferString(`{"email":"buyer@example.com","code":"135790"}`))
+		ctx.Request.Header.Set("Content-Type", "application/json")
+		handler.UserLoginWithEmailCode(ctx)
+		if bytes.Contains(recorder.Body.Bytes(), []byte("135790")) {
+			t.Fatalf("response echoed the code for %v: %s", loginErr, recorder.Body.Bytes())
+		}
+		var payload struct {
+			Msg string `json:"msg"`
+		}
+		if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if payload.Msg != "验证码无效或账号不可用" {
+			t.Fatalf("msg for %v = %q", loginErr, payload.Msg)
+		}
+		if first == "" {
+			first = payload.Msg
+		} else if payload.Msg != first {
+			t.Fatalf("client message diverged for %v", loginErr)
+		}
+	}
+
+	handler := NewUserLoginHandler(emailLoginHTTPSettings{}, emailLoginHTTPAuth{sendErr: ErrEmailServiceNotConfigured}, nil, nil)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/auth/login/email-code/send", bytes.NewBufferString(`{"email":"missing@example.com"}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+	handler.UserSendLoginEmailCode(ctx)
+	if bytes.Contains(recorder.Body.Bytes(), []byte(`"sent":true`)) {
+		t.Fatalf("unconfigured smtp reported success: %s", recorder.Body.Bytes())
+	}
+	if !bytes.Contains(recorder.Body.Bytes(), []byte("邮箱服务未配置")) {
+		t.Fatalf("missing smtp message: %s", recorder.Body.Bytes())
 	}
 }

@@ -6,6 +6,8 @@ export const userAuthAPI = {
     sendVerifyCode: (data: any) => userApi.post('/auth/send-verify-code', data),
     register: (data: any) => userApi.post('/auth/register', data),
     login: (data: any) => userApi.post('/auth/login', data),
+    sendLoginEmailCode: (data: any) => userApi.post('/auth/login/email-code/send', data),
+    loginWithEmailCode: (data: any) => userApi.post('/auth/login/email-code', data),
     verify2FA: (data: { challenge_token: string; code?: string; recovery_code?: string }) =>
         userApi.post('/auth/login/verify-2fa', data),
     telegramLogin: (data: TelegramAuthPayload) => userApi.post('/auth/telegram/login', data),

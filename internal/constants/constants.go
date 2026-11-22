@@ -328,8 +328,10 @@ const (
 	LoginLogFailReasonInvalidRecoveryCode  = "invalid_recovery_code"
 	LoginLogFailReasonChallengeInvalid     = "challenge_invalid"
 	LoginLogFailReasonTooManyAttempts      = "too_many_attempts"
-	// LoginLogPasswordOK2FAPending 第一步密码通过，等待 TOTP 验证
+	// LoginLogPasswordOK2FAPending 第一步身份通过，等待 TOTP 验证
 	LoginLogPasswordOK2FAPending = "password_ok_2fa_pending"
+	// LoginLogFailReasonEmailLoginInvalid 邮箱验证码登录被拒绝。客户端只看到这一类结果。
+	LoginLogFailReasonEmailLoginInvalid = "email_login_invalid"
 )
 
 // 登录日志来源常量
@@ -343,6 +345,7 @@ const (
 const (
 	VerifyPurposeRegister       = "register"
 	VerifyPurposeReset          = "reset"
+	VerifyPurposeLogin          = "login"
 	VerifyPurposeTelegramBind   = "telegram_bind"
 	VerifyPurposeChangeEmailOld = "change_email_old"
 	VerifyPurposeChangeEmailNew = "change_email_new"

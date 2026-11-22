@@ -183,6 +183,8 @@ test('Google login is classified as a public auth endpoint', () => {
   assert.equal(isPublicAuthEndpoint('/auth/google/redirect/exchange'), true)
   assert.equal(isPublicAuthEndpoint('/auth/google/login?source=button'), true)
   assert.equal(isPublicAuthEndpoint('/auth/login/verify-2fa'), true)
+  assert.equal(isPublicAuthEndpoint('/auth/login/email-code/send'), true)
+  assert.equal(isPublicAuthEndpoint('/auth/login/email-code'), true)
   assert.equal(isPublicAuthEndpoint('/auth/send-verify-code'), true)
   assert.equal(isPublicAuthEndpoint('/me/google'), false)
   assert.equal(isPublicAuthEndpoint('/me/google/bind'), false)

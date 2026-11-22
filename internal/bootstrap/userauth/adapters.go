@@ -426,6 +426,18 @@ func (a userLoginTransportAdapter) LoginStep1(ctx context.Context, email, passwo
 	return toUserAuthTransportLoginResult(ctx, a.auth, res)
 }
 
+func (a userLoginTransportAdapter) SendLoginEmailCode(ctx context.Context, email, locale string) error {
+	return mapUserAuthTransportError(a.auth.SendLoginEmailCode(ctx, email, locale))
+}
+
+func (a userLoginTransportAdapter) LoginWithEmailCode(ctx context.Context, email, code string, rememberMe bool) (*userauthtransport.AuthLoginResult, error) {
+	res, err := a.auth.LoginWithEmailCode(email, code, rememberMe)
+	if err != nil {
+		return nil, mapUserAuthTransportError(err)
+	}
+	return toUserAuthTransportLoginResult(ctx, a.auth, res)
+}
+
 // userLoginRecorderAdapter 将登录日志服务适配为 transport 记录端口。
 type userLoginRecorderAdapter struct {
 	logs *auditlogapp.UserLoginService
@@ -664,6 +676,7 @@ func mapUserAuthTransportError(err error) error {
 		{userauthapp.ErrAgreementRequired, userauthtransport.ErrAgreementRequired},
 		{userauthapp.ErrInvalidCredentials, userauthtransport.ErrInvalidCredentials},
 		{userauthapp.ErrEmailNotVerified, userauthtransport.ErrEmailNotVerified},
+		{userauthapp.ErrEmailLoginRejected, userauthtransport.ErrEmailLoginRejected},
 		{usertotpapp.ErrNotFound, userauthtransport.ErrUserNotFound},
 		{totpapplication.ErrAlreadyEnabled, userauthtransport.ErrTOTPAlreadyEnabled},
 		{totpapplication.ErrNotEnabled, userauthtransport.ErrTOTPNotEnabled},

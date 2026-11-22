@@ -17,6 +17,7 @@ var (
 	ErrVerifyCodeTooFrequent        = errors.New("verify code too frequent")
 	ErrVerifyCodeAttemptsExceeded   = errors.New("verify code attempts exceeded")
 	ErrEmailServiceNotConfigured    = errors.New("email service not configured")
+	ErrEmailLoginRejected           = errors.New("email login rejected")
 	ErrUserOAuthIdentityExists      = errors.New("user oauth identity exists")
 	ErrUserOAuthAlreadyBound        = errors.New("user oauth already bound")
 	ErrUserOAuthNotBound            = errors.New("user oauth not bound")
