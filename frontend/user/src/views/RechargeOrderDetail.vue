@@ -133,6 +133,7 @@
                   {{ checkingPayment ? t('personalCenter.wallet.checkingPayStatus') : t('personalCenter.wallet.checkPayStatus') }}
                 </Button>
               </div>
+              <p v-if="payLinkError" class="mt-3 text-sm text-destructive">{{ payLinkError }}</p>
               <div v-if="showTelegramPayHint" class="mt-3 text-xs text-muted-foreground">
                 {{ t('payment.telegramExternalHint') }}
               </div>
@@ -161,7 +162,7 @@ const { t } = useI18n()
 
 const {
   loading, checkingPayment, recharge, payment, walletAddressCopied, qrImageUrl,
-  isPending, payLink, showTelegramPayHint, qrUsingPayLinkFallback, showQRCode,
+  isPending, payLink, payLinkError, showTelegramPayHint, qrUsingPayLinkFallback, showQRCode,
   cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, customerFeeApplied,
   rechargeStatusText, rechargeStatusVariant, formatMoney, formatDate,
   loadDetail, checkPayment, handleOpenPayLink, handleCopyWalletAddress,

@@ -1,5 +1,5 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter, useRoute } from 'vue-router'
+import { NavigationFailureType, isNavigationFailure, useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useCartStore, type CartItem } from '../stores/cart'
 import { useBuyNowStore } from '../stores/buyNow'
@@ -15,6 +15,7 @@ import { getImageUrl } from '../utils/image'
 import { resolveCartStockTier, stockTierMessageKey } from '../utils/publicStock'
 import { getAffiliateCode, getAffiliateVisitorKey } from '../utils/affiliate'
 import { protectionHeaders, requestProtection } from '../utils/paymentProtection'
+import { checkoutAttemptFingerprint, readPlacedCheckoutOrder, rememberPlacedCheckoutOrder } from '../utils/checkoutOrderResume'
 import { saveGuestOrderAuth } from '../utils/guestOrderAuth'
 import ImageCaptcha from '../components/captcha/ImageCaptcha.vue'
 import TurnstileCaptcha from '../components/captcha/TurnstileCaptcha.vue'
@@ -815,12 +816,60 @@ export function useCheckout() {
     }
   }
 
+  const checkoutResumeStorage = () => {
+    if (typeof sessionStorage === 'undefined') return null
+    return sessionStorage
+  }
+
+  const currentCheckoutFingerprint = () => checkoutAttemptFingerprint({
+    items: cartItems.value.map((item) => ({
+      productId: item.productId,
+      skuId: item.skuId,
+      quantity: item.quantity,
+      fulfillmentType: item.fulfillmentType,
+    })),
+    manualForm: buildManualFormDataPayload(),
+    couponCode: normalizedCouponCode.value,
+    channelId: selectedChannelId.value,
+    useBalance: useBalance.value,
+    guestEmail: userAuthStore.isAuthenticated ? '' : guestEmail.value,
+  })
+
+  const openPaymentPage = async (orderNo: string, guest: boolean) => {
+    const location = {
+      name: 'payment' as const,
+      query: guest ? { guest: '1', order_no: orderNo } : { order_no: orderNo },
+    }
+    try {
+      const failure = await router.push(location)
+      if (failure && !isNavigationFailure(failure, NavigationFailureType.duplicated)) {
+        window.location.assign(router.resolve(location).href)
+      }
+    } catch {
+      window.location.assign(router.resolve(location).href)
+    }
+  }
+
   const handleSubmit = async () => {
     submitAttempted.value = true
     error.value = ''
     previewError.value = ''
     if (!canSubmit.value) {
       error.value = submitBlockedReason.value || t('checkout.errors.submitFailed')
+      return
+    }
+
+    const fingerprint = currentCheckoutFingerprint()
+    const resumeStorage = checkoutResumeStorage()
+    const placed = resumeStorage ? readPlacedCheckoutOrder(fingerprint, resumeStorage) : null
+    if (placed) {
+      submitting.value = true
+      try {
+        clearSourceStore()
+        await openPaymentPage(placed.orderNo, placed.guest)
+      } finally {
+        submitting.value = false
+      }
       return
     }
 
@@ -880,14 +929,19 @@ export function useCheckout() {
         throw new Error(t('checkout.errors.submitFailed'))
       }
 
+      const placedOrderNo = String(responseData.order_no)
+      if (resumeStorage) {
+        rememberPlacedCheckoutOrder({
+          fingerprint,
+          orderNo: placedOrderNo,
+          guest: !userAuthStore.isAuthenticated,
+          at: Date.now(),
+        }, resumeStorage)
+      }
       clearSourceStore()
 
-      // Redirect to the existing Payment page which handles all payment display
       protectionStep.value = 4
-      const query = userAuthStore.isAuthenticated
-        ? `order_no=${encodeURIComponent(responseData.order_no)}`
-        : `guest=1&order_no=${encodeURIComponent(responseData.order_no)}`
-      router.push(`/pay?${query}`)
+      await openPaymentPage(placedOrderNo, !userAuthStore.isAuthenticated)
       protectionOpen.value = false
     } catch (err: any) {
       if (protectionController?.signal.aborted) return

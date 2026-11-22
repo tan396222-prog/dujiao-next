@@ -1,6 +1,6 @@
 <template>
-  <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
   <div class="min-h-screen bg-background text-foreground pt-24 pb-16">
+    <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
     <div class="container mx-auto px-4">
       <div class="mb-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         <div>
@@ -85,6 +85,14 @@
             </div>
           </div>
 
+          <Alert
+            v-if="paymentAlert"
+            :variant="pageAlertVariant(paymentAlert.level)"
+            :class="['mt-4', pageAlertToneClass(paymentAlert.level)]"
+          >
+            <AlertDescription>{{ paymentAlert.message }}</AlertDescription>
+          </Alert>
+
           <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div class="lg:col-span-2 space-y-4">
               <div v-if="showQRCode"
@@ -95,6 +103,16 @@
                 </div>
                 <div v-if="qrUsingPayLinkFallback" class="mt-3 text-xs text-muted-foreground">
                   {{ t('payment.qrFallbackHint') }}
+                </div>
+                <div v-if="showPayLink" class="mt-3 flex flex-wrap items-center justify-center gap-2">
+                  <Button type="button" variant="default" class="h-11 px-5 rounded-full bg-foreground font-semibold text-background hover:bg-foreground/85" @click="handleOpenPayLink">
+                    <ExternalLink class="h-4 w-4" aria-hidden="true" />
+                    {{ t('payment.openPayLink') }}
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" class="rounded-full font-semibold" @click="handleCopyPayLink">
+                    <Copy class="h-4 w-4" aria-hidden="true" />
+                    {{ t('payment.copyPayLink') }}
+                  </Button>
                 </div>
                 <div v-if="hasCryptoPaymentDetails" class="mt-4 w-full max-w-xl space-y-2 rounded-2xl bg-card p-3 text-left">
                   <div

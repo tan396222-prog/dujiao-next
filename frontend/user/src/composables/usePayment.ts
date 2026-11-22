@@ -15,13 +15,14 @@ import {
   getCachedPaymentRestorePolicy,
   getPaymentResetPolicy,
   isCustomerSurchargePayment,
+  openResolvedPaymentLink,
   resolvePaymentInteractionLabelKey,
-  resolvePaymentLinkNavigationTarget,
   resolvePaymentPresentationMode,
   resolvePaymentResultTitleKey,
   shouldAutoOpenPaymentLink,
   type PaymentResetReason,
 } from '../utils/paymentResumePolicy'
+import { forgetPlacedCheckoutOrder } from '../utils/checkoutOrderResume'
 import QRCode from 'qrcode'
 import { type PageAlert } from '../utils/alerts'
 import { loadGuestOrderAuth, saveGuestOrderAuth } from '../utils/guestOrderAuth'
@@ -318,6 +319,7 @@ export function usePayment() {
     } catch (err) {
       if (currentVersion !== qrRenderVersion.value) return
       qrImageUrl.value = ''
+      error.value = t('payment.qrFailed')
     }
   }
 
@@ -584,6 +586,11 @@ export function usePayment() {
     }
   }
 
+  const releasePlacedCheckoutOrder = () => {
+    if (typeof sessionStorage === 'undefined') return
+    forgetPlacedCheckoutOrder(sessionStorage, String(orderNoQuery.value || order.value?.order_no || ''))
+  }
+
   const loadOrder = async (options?: { silent?: boolean }) => {
     const silent = options?.silent && !!order.value
     if (!silent) {
@@ -630,6 +637,9 @@ export function usePayment() {
     } finally {
       try {
         if (order.value) {
+          if (orderCanceled.value || orderExpired.value || order.value.status !== 'pending_payment') {
+            releasePlacedCheckoutOrder()
+          }
           if (orderCanceled.value) {
             if (!silent) {
               error.value = t('payment.orderCanceled')
@@ -761,24 +771,32 @@ export function usePayment() {
   }
 
   const openPayLinkInCompatibleWindow = (automatic = false) => {
-    if (!payLink.value) return
-    if (isTelegramMiniApp.value) {
-      telegramMiniAppStore.openLink(payLink.value)
-    } else if (resolvePaymentLinkNavigationTarget(automatic) === 'current-tab') {
-      // 支付请求返回后已脱离原始点击事件，浏览器通常会拦截此时创建的新窗口。
-      // 自动收银台跳转使用当前标签页，既可靠也能保留当前 sessionStorage。
-      window.location.assign(payLink.value)
-      return
-    } else {
+    const result = openResolvedPaymentLink({
+      url: payLink.value,
+      automatic,
+      telegram: isTelegramMiniApp.value,
+      openTelegram: (url) => {
+        telegramMiniAppStore.openLink(url)
+      },
+      assign: (url) => {
+        window.location.assign(url)
+      },
       // 先创建同源空白页，让浏览器按规范复制当前标签页的 sessionStorage；
-      // 随后立即切断 opener 再跳转到支付站。这样第三方回跳仍能恢复游客订单，
-      // 同时不给外部收银台保留反向控制原页面的能力。
-      const paymentWindow = window.open('', '_blank')
-      if (!paymentWindow) return
-      paymentWindow.opener = null
-      paymentWindow.location.replace(payLink.value)
+      // 随后立即切断 opener 再跳转到支付站。自动跳转不走这里，避免弹窗被拦截后页面空白。
+      openWindow: (url) => {
+        const paymentWindow = window.open('', '_blank')
+        if (!paymentWindow) return false
+        paymentWindow.opener = null
+        paymentWindow.location.replace(url)
+        return true
+      },
+    })
+    if (result === 'opened') {
+      openedPayWindow.value = true
+      return
     }
-    openedPayWindow.value = true
+    openedPayWindow.value = false
+    error.value = result === 'blocked' ? t('payment.payLinkBlocked') : t('payment.payLinkRejected')
   }
 
   const handleOpenPayLink = () => {
@@ -1258,16 +1276,24 @@ export function usePayment() {
   }
 
   onMounted(() => {
-    if (isRechargeReturn.value && rechargeNoQuery.value) {
-      void redirectToWalletRecharge()
-      return
-    }
-    if (!orderNoQuery.value) return
-    guestAuth.value = loadGuestOrderAuth()
-    loadOrder()
-    void loadWallet()
-    if (!appStore.config || !Array.isArray(appStore.config?.payment_channels)) {
-      appStore.loadConfig(true)
+    try {
+      if (isRechargeReturn.value && rechargeNoQuery.value) {
+        void redirectToWalletRecharge()
+        return
+      }
+      if (!orderNoQuery.value) return
+      guestAuth.value = loadGuestOrderAuth()
+      void loadOrder().catch((err: any) => {
+        loading.value = false
+        error.value = err?.message || t('payment.createFailed')
+      })
+      void loadWallet()
+      if (!appStore.config || !Array.isArray(appStore.config?.payment_channels)) {
+        appStore.loadConfig(true)
+      }
+    } catch (err: any) {
+      loading.value = false
+      error.value = err?.message || t('payment.createFailed')
     }
   })
 

@@ -1,6 +1,6 @@
 <template>
-  <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
   <div class="mx-auto w-full max-w-[1180px] px-6 pb-8">
+    <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
     <nav class="flex flex-wrap items-center gap-1.5 py-5 pb-2 text-[13.5px] font-semibold text-muted-foreground">
       <RouterLink to="/" class="hover:text-primary">{{ t('nav.home') }}</RouterLink>
       <ChevronRight class="h-4 w-4 flex-none" />

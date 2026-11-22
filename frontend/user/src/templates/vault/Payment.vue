@@ -1,6 +1,6 @@
 <template>
-  <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
   <div class="mx-auto w-full max-w-[1180px] px-6 pb-8">
+    <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
     <div class="my-5 flex items-start justify-between gap-4">
       <div>
         <h1 class="mb-1.5 text-[32px] font-extrabold">{{ t('payment.title') }}</h1>
@@ -50,6 +50,8 @@
         </div>
       </div>
 
+      <div v-if="paymentAlert" class="mt-4 rounded-sm px-3 py-2.5 text-[13px] font-semibold" :class="paymentAlert.level === 'error' ? 'bg-destructive/10 text-destructive' : (paymentAlert.level === 'success' ? 'bg-[color:var(--teal-soft)] text-[color:var(--teal-strong)]' : 'bg-warning/10 text-warning')">{{ paymentAlert.message }}</div>
+
       <div class="mt-5 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div>
           <!-- QR -->
@@ -57,6 +59,10 @@
             <div class="mb-3 text-[13px] text-muted-foreground">{{ paymentGuideTitle }}</div>
             <div class="aspect-square w-full max-w-[240px] overflow-hidden rounded-md bg-white p-2"><img :src="qrImageUrl" alt="QR Code" class="h-full w-full object-contain" /></div>
             <div v-if="qrUsingPayLinkFallback" class="mt-2.5 text-xs text-muted-foreground">{{ t('payment.qrFallbackHint') }}</div>
+            <div v-if="showPayLink" class="mt-3 flex flex-wrap items-center justify-center gap-2">
+              <Button size="sm" class="rounded-full" @click="handleOpenPayLink">{{ t('payment.openPayLink') }}</Button>
+              <Button variant="outline" size="sm" class="rounded-full" @click="handleCopyPayLink">{{ t('payment.copyPayLink') }}</Button>
+            </div>
             <div v-if="hasCryptoPaymentDetails" class="mt-4 grid w-full gap-2 rounded-md border p-3 text-left">
               <div v-for="item in cryptoPaymentDetails" :key="item.key" class="flex justify-between gap-3 border-b pb-1.5 last:border-b-0 last:pb-0">
                 <span class="flex-none text-xs text-muted-foreground">{{ item.label }}</span>

@@ -1,6 +1,6 @@
 <template>
-  <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
   <div class="min-h-screen bg-background pb-16 pt-24 text-foreground">
+    <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
     <div class="container mx-auto px-4">
       <div class="mb-6 flex flex-wrap items-end justify-between gap-x-8 gap-y-4">
         <div>
