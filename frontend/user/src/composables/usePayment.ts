@@ -26,6 +26,7 @@ import { forgetPlacedCheckoutOrder } from '../utils/checkoutOrderResume'
 import QRCode from 'qrcode'
 import { type PageAlert } from '../utils/alerts'
 import { loadGuestOrderAuth, saveGuestOrderAuth } from '../utils/guestOrderAuth'
+import { planPaymentBootstrap, resolvePaymentPageView, settlePaymentOrderLoad } from '../utils/paymentPageState'
 
 /**
  * 支付页共享逻辑（classic + vault 双模板共用）。
@@ -131,7 +132,13 @@ export function usePayment() {
   })
   const backLink = computed(() => (isGuest.value ? '/guest/orders' : '/me/orders'))
   const hasGuestAuth = computed(() => Boolean(guestAuth.value.email && guestAuth.value.order_password))
-  const showGuestAuthForm = computed(() => isGuest.value && (!hasGuestAuth.value || guestAuthError.value))
+  const paymentPageView = computed(() => resolvePaymentPageView({
+    loading: loading.value,
+    isGuest: isGuest.value,
+    hasGuestAuth: hasGuestAuth.value,
+    guestAuthError: guestAuthError.value,
+    order: order.value,
+  }))
   const walletOnlyPayment = computed(() => !!appStore.config?.wallet_only_payment)
   const showBalanceOption = computed(() => !isGuest.value)
 
@@ -591,8 +598,21 @@ export function usePayment() {
     forgetPlacedCheckoutOrder(sessionStorage, String(orderNoQuery.value || order.value?.order_no || ''))
   }
 
+  const applySettledOrderLoad = (failed: boolean) => {
+    const settled = settlePaymentOrderLoad({
+      isGuest: isGuest.value,
+      hasGuestAuth: hasGuestAuth.value,
+      failed,
+      order: order.value,
+    })
+    guestAuthError.value = settled.guestAuthErrorKey ? t(settled.guestAuthErrorKey) : ''
+    loading.value = false
+    return settled
+  }
+
   const loadOrder = async (options?: { silent?: boolean }) => {
     const silent = options?.silent && !!order.value
+    let failed = false
     if (!silent) {
       loading.value = true
     }
@@ -600,7 +620,6 @@ export function usePayment() {
       if (isGuest.value) {
         if (!hasGuestAuth.value) {
           order.value = null
-          guestAuthError.value = t('payment.guestAuthRequired')
           return
         }
         if (!orderNoQuery.value) {
@@ -614,7 +633,6 @@ export function usePayment() {
           order_password: guestAuth.value.order_password,
         }, { silentBusinessError: true })
         order.value = response.data.data
-        guestAuthError.value = ''
       } else {
         if (!orderNoQuery.value) {
           order.value = null
@@ -627,12 +645,10 @@ export function usePayment() {
       }
     } catch (err) {
       if (!silent) {
+        failed = true
         order.value = null
         orderPaymentChannels.value = []
         orderPaymentChannelsLoaded.value = false
-        if (isGuest.value) {
-          guestAuthError.value = t('payment.guestAuthInvalid')
-        }
       }
     } finally {
       try {
@@ -661,7 +677,7 @@ export function usePayment() {
         }
       } finally {
         if (!silent) {
-          loading.value = false
+          applySettledOrderLoad(failed)
         }
       }
     }
@@ -1277,12 +1293,23 @@ export function usePayment() {
 
   onMounted(() => {
     try {
-      if (isRechargeReturn.value && rechargeNoQuery.value) {
+      const plan = planPaymentBootstrap({
+        rechargeReturn: isRechargeReturn.value && rechargeNoQuery.value !== '',
+        orderNo: orderNoQuery.value,
+      })
+      if (plan === 'recharge') {
+        loading.value = false
         void redirectToWalletRecharge()
         return
       }
-      if (!orderNoQuery.value) return
       guestAuth.value = loadGuestOrderAuth()
+      if (plan === 'missing-order') {
+        order.value = null
+        orderPaymentChannels.value = []
+        orderPaymentChannelsLoaded.value = false
+        applySettledOrderLoad(false)
+        return
+      }
       void loadOrder().catch((err: any) => {
         loading.value = false
         error.value = err?.message || t('payment.createFailed')
@@ -1325,7 +1352,12 @@ export function usePayment() {
     async ([, orderNo], [, previousOrderNo]) => {
       if (!previousOrderNo || orderNo === previousOrderNo) return
       resetPaymentRouteState()
-      if (!orderNo) return
+      if (!orderNo) {
+        guestAuth.value = loadGuestOrderAuth()
+        order.value = null
+        applySettledOrderLoad(false)
+        return
+      }
       await loadOrder()
       void loadWallet()
     }
@@ -1435,7 +1467,7 @@ export function usePayment() {
     useBalance,
     // routing / flags
     backLink,
-    showGuestAuthForm,
+    paymentPageView,
     walletOnlyPayment,
     showBalanceOption,
     configReady,

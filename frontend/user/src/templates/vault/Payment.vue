@@ -12,13 +12,13 @@
     <VaultCheckoutSteps current="payment" />
 
     <!-- Loading -->
-    <div v-if="loading" class="mb-[18px] rounded-xl border bg-card p-[22px]">
+    <div v-if="paymentPageView === 'loading'" class="mb-[18px] rounded-xl border bg-card p-[22px]">
       <div class="mb-4 h-5 w-[40%] rounded bg-secondary"></div>
       <div class="h-[180px] rounded-md bg-secondary"></div>
     </div>
 
     <!-- 游客验证 -->
-    <div v-else-if="showGuestAuthForm" class="mb-[18px] rounded-xl border bg-card p-[22px]">
+    <div v-else-if="paymentPageView === 'guest-form'" class="mb-[18px] rounded-xl border bg-card p-[22px]">
       <h2 class="mb-1.5 text-lg font-bold">{{ t('payment.guestAuthTitle') }}</h2>
       <p class="mb-3.5 text-[13px] text-muted-foreground">{{ t('payment.guestAuthHint') }}</p>
       <div class="grid gap-3 sm:grid-cols-2">
@@ -30,7 +30,7 @@
     </div>
 
     <!-- 订单不存在 -->
-    <div v-else-if="!order" class="my-8 flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center text-muted-foreground">
+    <div v-else-if="paymentPageView === 'empty'" class="my-8 flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center text-muted-foreground">
       <AlertCircle class="h-10 w-10 opacity-60" />
       <p>{{ t('payment.orderNotFound') }}</p>
       <Button as-child class="mt-2 rounded-full" size="sm"><RouterLink :to="backLink">{{ t('payment.backToOrders') }}</RouterLink></Button>
@@ -272,7 +272,7 @@ const { t } = useI18n()
 const {
   loading, submitting, order, paymentResult, selectedChannelId, copied, walletAddressCopied,
   openedPayWindow, cachedPayment, guestAuth, guestAuthError, walletLoading, useBalance,
-  backLink, showGuestAuthForm, walletOnlyPayment, showBalanceOption, configReady, channels,
+  backLink, paymentPageView, walletOnlyPayment, showBalanceOption, configReady, channels,
   selectedChannel, selectedChannelName, cachedChannelName, resultChannelName, interactionLabel,
   paymentResultTitle, paymentGuideTitle, paymentGuideTip, showPayLink, showTelegramPayHint, payLinkOpenedTip,
   cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, qrUsingPayLinkFallback, showQRCode, qrImageUrl,

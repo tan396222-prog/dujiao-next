@@ -35,9 +35,9 @@ test('checkout and payment pages have one root so route transitions cannot stick
 test('payment page shows guest credentials, a missing order, and a qr or cashier failure', () => {
   for (const relativePath of ['../src/views/Payment.vue', '../src/templates/vault/Payment.vue']) {
     const source = readFileSync(fileURLToPath(new URL(relativePath, import.meta.url)), 'utf8')
-    assert.match(source, /showGuestAuthForm/)
+    assert.match(source, /paymentPageView === 'guest-form'/)
     assert.match(source, /payment\.guestAuthTitle/)
-    assert.match(source, /v-else-if="!order"/)
+    assert.match(source, /paymentPageView === 'empty'/)
     assert.match(source, /payment\.orderNotFound/)
     assert.match(source, /showQRCode/)
     assert.match(source, /paymentAlert/)
@@ -48,5 +48,6 @@ test('payment page shows guest credentials, a missing order, and a qr or cashier
   assert.match(payment, /payment\.payLinkBlocked/)
   assert.match(payment, /payment\.qrFailed/)
   assert.match(payment, /loadGuestOrderAuth\(\)/)
-  assert.match(payment, /guestAuthError\.value = t\('payment\.guestAuthRequired'\)/)
+  assert.match(payment, /t\(settled\.guestAuthErrorKey\)/)
+  assert.match(payment, /plan === 'missing-order'/)
 })
