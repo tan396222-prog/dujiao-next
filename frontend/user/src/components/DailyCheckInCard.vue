@@ -16,7 +16,9 @@
     <p v-if="view.offsetsDebt" class="mt-2 text-sm font-semibold text-foreground">
       {{ t('personalCenter.checkin.debtOffset', { amount: view.debtOffset }) }}
     </p>
+    <p v-if="celebrated" class="mt-3 text-sm font-bold text-foreground" data-checkin-success>{{ t('personalCenter.checkin.success') }}</p>
     <p v-if="errorMessage" class="mt-3 text-sm font-semibold text-destructive">{{ errorMessage }}</p>
+    <CheckInCelebrationOverlay v-if="celebration === 'fireworks'" mode="fireworks" @done="celebration = 'static'" />
     <Button
       v-if="view.showClaimButton"
       type="button"
@@ -35,12 +37,19 @@ import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { checkInAPI } from '../api/checkin'
 import { dailyCheckInView, type DailyCheckInStatus } from '../utils/dailyCheckIn'
+import { checkInCelebration, type CheckInCelebration } from '../utils/checkInCelebration'
+import CheckInCelebrationOverlay from './CheckInCelebration.vue'
 import { Button } from '@/components/ui/button'
 
 const { t } = useI18n()
 const status = ref<DailyCheckInStatus | null>(null)
 const claiming = ref(false)
 const errorMessage = ref('')
+const celebration = ref<CheckInCelebration>('none')
+const celebrated = computed(() => celebration.value !== 'none')
+const reducedMotion = () => (
+  typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+)
 const view = computed(() => dailyCheckInView(status.value))
 const stateText = computed(() => (
   status.value?.checked_in ? t('personalCenter.checkin.claimed') : t('personalCenter.checkin.claim')
@@ -62,8 +71,17 @@ const claimCheckIn = async () => {
   errorMessage.value = ''
   try {
     const response = await checkInAPI.claim()
-    status.value = response.data.data || status.value
+    const data = response.data.data || null
+    status.value = data || status.value
+    celebration.value = checkInCelebration({
+      source: 'claim',
+      ok: true,
+      checkedIn: data?.checked_in === true,
+      alreadyClaimed: data?.already_claimed,
+      reducedMotion: reducedMotion(),
+    })
   } catch (err: any) {
+    celebration.value = 'none'
     errorMessage.value = err?.message || t('personalCenter.checkin.errors.claimFailed')
   } finally {
     claiming.value = false

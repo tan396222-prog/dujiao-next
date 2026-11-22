@@ -20,10 +20,10 @@ func TestProductionSourcesStayOnTheAllowlist(t *testing.T) {
 		"https://aihot.news/api/v1/items?mode=selected&window=24h&by=timeline&limit=20",
 		"https://aihot.news/api/v1/hot-topics",
 		"https://aihot.news/api/v1/dailies/latest",
-		"https://aihot.news/api/v1/codex-resets/recent",
-		"https://aihot.news/api/v1/antigravity-resets/recent",
-		"https://aihot.news/api/v1/claude-resets/recent",
-		"https://aihot.news/api/v1/grok-bot-resets/recent",
+		"https://aihot.news/api/v1/codex-resets",
+		"https://aihot.news/api/v1/antigravity-resets",
+		"https://aihot.news/api/v1/claude-resets",
+		"https://aihot.news/api/v1/grok-bot-resets",
 	}
 	got := ProductionSourceURLs()
 	if len(got) != len(want) {
@@ -219,107 +219,173 @@ func TestRedirectToAnotherHostIsNotFollowed(t *testing.T) {
 	}
 }
 
-func TestResetEstimateIsLabeledAndFullTextIsDropped(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{
-			"schemaVersion":1,
-			"checkedAt":"2026-11-21T10:00:00+08:00",
-			"events":[{
-				"title":"已公布重置",
-				"displayLabel":"付费用户",
-				"confirmedAt":null,
-				"schedule":{"precision":"approximate","label":"大约今晚"},
-				"estimate":{"label":"模型推算窗口"},
-				"presentation":{"timeInferred":true},
-				"posts":[{"text":"中文摘要","originalText":"original notice","fullText":"SHOULD NOT APPEAR IN FULL","url":"https://x.com/example/status/1"}],
-				"url":"https://aihot.news/codex-reset"
-			}]
-		}`))
-	}))
-	defer server.Close()
-	service := NewService(Options{Sources: []source{{
-		Key: "codex", Kind: kindReset, Provider: "codex", PageURL: "https://aihot.news/codex-reset", URL: server.URL, TTL: time.Minute, MinGap: time.Minute,
-	}}})
-	service.allowTestHosts = true
-	snapshot := service.Snapshot(context.Background())
-	if len(snapshot.Resets) != 1 || len(snapshot.Resets[0].Events) != 1 {
-		t.Fatalf("resets = %+v", snapshot.Resets)
-	}
-	event := snapshot.Resets[0].Events[0]
-	if !event.Estimated || event.Estimate != "模型推算窗口" || event.Summary != "中文摘要" {
-		t.Fatalf("event = %+v", event)
-	}
-	if event.OccurredOn != "" || len(event.ScheduleDates) != 0 {
-		t.Fatalf("an estimate became a calendar day: %+v", event)
-	}
-	if event.Original != "original notice" || event.FeedURL != "https://aihot.news/codex-reset" {
-		t.Fatalf("links = %+v", event)
-	}
-	raw, _ := json.Marshal(snapshot)
-	if contains(string(raw), "SHOULD NOT APPEAR") {
-		t.Fatal("full text leaked")
-	}
-}
-
-func TestResetCalendarUsesVerifiedDayNotPublishTime(t *testing.T) {
+func TestResetCalendarKeepsTypeAndDropsPosts(t *testing.T) {
+	// Fixture, not a live capture. The dates exercise the public calendar rule.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
 			"schemaVersion":1,
 			"checkedAt":"2026-11-22T20:23:00+08:00",
+			"historyFrom":"2026-04-15T00:00:00.000+08:00",
 			"events":[
 				{
-					"title":"只有确认帖时间",
+					"id":"card-confirmed",
+					"type":"reset_credit",
+					"title":"重置卡已发放",
 					"label":"全员重置",
-					"confirmedAt":"2026-11-21T17:18:00+08:00",
+					"displayLabel":"Tibo 发重置卡",
+					"status":"confirmed",
+					"confirmedAt":"2026-11-01T17:18:00+08:00",
 					"occurredOn":null,
-					"estimate":{"from":"2026-11-21T12:00:00+08:00","through":"2026-11-21T18:00:00+08:00","basis":"model","label":"模型窗口","reason":"history"},
-					"posts":[{"text":"摘要","publishedAt":"2026-11-21T17:18:00+08:00","url":"https://x.com/example/status/1"}]
+					"schedule":{"precision":"deadline","from":"2026-11-02T00:00:00+08:00","through":"2026-11-02T00:00:00+08:00","label":"11-02"},
+					"estimate":{"label":"模型窗口"},
+					"presentation":{"status":"confirmed","scopeLabel":"Codex"},
+					"posts":[{"author":"thsottiaux","text":"<script>alert(1)</script>帖子正文不该出现","originalText":"original post","url":"https://x.com/example/status/1","publishedAt":"2026-11-01T17:18:00+08:00"}],
+					"url":"https://aihot.news/codex-reset"
 				},
 				{
-					"title":"已核对的重置日",
-					"displayLabel":"额度重置",
-					"confirmedAt":"2026-11-21T17:18:00+08:00",
+					"id":"quota-occurred",
+					"type":"direct_reset",
+					"title":"额度重置已完成",
+					"confirmedAt":"2026-11-20T17:18:00+08:00",
 					"occurredOn":"2026-11-21",
-					"schedule":{"precision":"date","label":"公告写明 11 月 21 日","from":"2026-11-20T16:00:00Z","through":"2026-11-21T15:59:00Z"},
-					"presentation":{"status":"confirmed","scopeKnown":true,"scopeLabel":"Gemini 额度","kindExplicit":true,"timeInferred":false},
-					"posts":[{"text":"公告摘要","publishedAt":"2026-11-22T01:00:00Z"}]
+					"schedule":{"precision":"date","from":"2026-11-20T16:00:00Z","through":"2026-11-21T15:59:00Z"},
+					"presentation":{"status":"confirmed"},
+					"posts":[{"publishedAt":"2026-11-22T01:00:00Z","text":"另一段正文"}]
 				},
 				{
-					"title":"跨周的含糊窗口",
-					"displayLabel":"额度重置",
+					"id":"published-only",
+					"type":"direct_reset",
+					"status":"announced",
+					"presentation":{"status":"likely_completed"},
+					"posts":[{"publishedAt":"2026-10-23T09:00:00+08:00","text":"只有发布日"}]
+				},
+				{
+					"id":"wide-window",
+					"type":"direct_reset",
 					"occurredOn":"2026-02-31",
-					"schedule":{"precision":"window","label":"这个月某个时候","from":"2026-11-01T00:00:00+08:00","through":"2026-11-20T00:00:00+08:00"},
-					"posts":[{"text":"窗口太宽"}]
+					"schedule":{"precision":"window","from":"2026-11-01T00:00:00+08:00","through":"2026-11-20T00:00:00+08:00"},
+					"presentation":{"status":"announced"}
+				},
+				{
+					"id":"no-type",
+					"title":"维护公告",
+					"confirmedAt":"2026-11-18T09:00:00+08:00",
+					"posts":[{"text":"这不是重置"}]
+				},
+				{
+					"id":"expired",
+					"type":"reset_credit",
+					"presentation":{"status":"expired_unconfirmed"},
+					"schedule":{"from":"2026-11-09T08:00:00+08:00","through":"2026-11-09T12:00:00+08:00"}
 				}
 			]
 		}`))
 	}))
 	defer server.Close()
-	service := NewService(Options{Sources: []source{{
-		Key: "codex", Kind: kindReset, Provider: "codex", PageURL: "https://aihot.news/codex-reset", URL: server.URL, TTL: time.Minute, MinGap: time.Minute,
-	}}})
+	service := resetTestService(t, server.URL, time.Minute)
+	section := service.Snapshot(context.Background()).Resets[0]
+	if len(section.Events) != 4 {
+		t.Fatalf("events = %+v", section.Events)
+	}
+	want := []aifeedcontract.ResetEvent{
+		{Kind: aifeedcontract.ResetKindCard, Status: aifeedcontract.ResetStatusEffective, Date: "2026-11-01"},
+		{Kind: aifeedcontract.ResetKindQuota, Status: aifeedcontract.ResetStatusEffective, Date: "2026-11-21"},
+		{Kind: aifeedcontract.ResetKindQuota, Status: aifeedcontract.ResetStatusEffective, Date: "2026-10-23"},
+		{Kind: aifeedcontract.ResetKindCard, Status: aifeedcontract.ResetStatusUnconfirmed, Date: "2026-11-09"},
+	}
+	for index, event := range want {
+		if section.Events[index] != event {
+			t.Fatalf("event %d = %+v", index, section.Events[index])
+		}
+	}
+	raw, _ := json.Marshal(section)
+	text := string(raw)
+	for _, leaked := range []string{"帖子正文", "original post", "x.com", "thsottiaux", "alert", "aihot.news", "模型窗口", "全员重置", "维护公告", "page_url", "title", "summary"} {
+		if contains(text, leaked) {
+			t.Fatalf("calendar payload leaked %q: %s", leaked, text)
+		}
+	}
+}
+
+func TestResetHistoryMergesShortWindowAndKeepsFailure(t *testing.T) {
+	now := time.Date(2026, 11, 22, 15, 0, 0, 0, time.FixedZone("Asia/Shanghai", 8*60*60))
+	var phase atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch phase.Add(1) {
+		case 1:
+			_, _ = w.Write([]byte(`{
+				"schemaVersion":1,
+				"checkedAt":"2026-11-22T15:00:00+08:00",
+				"historyFrom":"2026-04-15T00:00:00.000+08:00",
+				"events":[
+					{"id":"old","type":"direct_reset","occurredOn":"2026-08-11","presentation":{"status":"confirmed"}},
+					{"id":"keep","type":"reset_credit","occurredOn":"2026-09-23","presentation":{"status":"confirmed"}}
+				]
+			}`))
+		case 2:
+			_, _ = w.Write([]byte(`{
+				"schemaVersion":1,
+				"checkedAt":"2026-11-22T15:10:00+08:00",
+				"historyFrom":"2026-11-15T00:00:00.000+08:00",
+				"events":[
+					{"id":"keep","type":"reset_credit","occurredOn":"2026-09-23","presentation":{"status":"confirmed"}},
+					{"id":"new","type":"direct_reset","occurredOn":"2026-11-21","presentation":{"status":"confirmed"}}
+				]
+			}`))
+		default:
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
+	}))
+	defer server.Close()
+	service := NewService(Options{
+		Now: func() time.Time { return now },
+		Sources: []source{{
+			Key: "codex", Kind: kindReset, Provider: "codex", URL: server.URL, TTL: 0,
+		}},
+	})
 	service.allowTestHosts = true
+	first := service.Snapshot(context.Background()).Resets[0].Events
+	if len(first) != 2 || first[0].Date != "2026-08-11" {
+		t.Fatalf("full snapshot = %+v", first)
+	}
+	second := service.Snapshot(context.Background()).Resets[0].Events
+	if len(second) != 3 || second[0].Date != "2026-08-11" || second[2].Date != "2026-11-21" {
+		t.Fatalf("short window dropped history: %+v", second)
+	}
+	third := service.Snapshot(context.Background()).Resets[0]
+	if !third.Stale || len(third.Events) != 3 || third.Events[0].Date != "2026-08-11" {
+		t.Fatalf("failure dropped history: %+v", third)
+	}
+}
+
+func TestFullSnapshotRemovesWithdrawnEvent(t *testing.T) {
+	var phase atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if phase.Add(1) == 1 {
+			_, _ = w.Write([]byte(`{
+				"schemaVersion":1,"historyFrom":"2026-04-15T00:00:00.000+08:00",
+				"events":[
+					{"id":"gone","type":"direct_reset","occurredOn":"2026-08-01","presentation":{"status":"confirmed"}},
+					{"id":"stay","type":"reset_credit","occurredOn":"2026-09-04","presentation":{"status":"confirmed"}}
+				]
+			}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{
+			"schemaVersion":1,"historyFrom":"2026-04-15T00:00:00.000+08:00",
+			"events":[
+				{"id":"stay","type":"reset_credit","occurredOn":"2026-09-04","presentation":{"status":"confirmed"}}
+			]
+		}`))
+	}))
+	defer server.Close()
+	service := resetTestService(t, server.URL, 0)
+	if events := service.Snapshot(context.Background()).Resets[0].Events; len(events) != 2 {
+		t.Fatalf("first = %+v", events)
+	}
 	events := service.Snapshot(context.Background()).Resets[0].Events
-	if len(events) != 3 {
-		t.Fatalf("events = %+v", events)
-	}
-	if events[0].OccurredOn != "" || len(events[0].ScheduleDates) != 0 || events[0].Label != "" {
-		t.Fatalf("publish time or legacy everyone label became a reset: %+v", events[0])
-	}
-	if events[0].AnnouncedAt == "" || events[0].ConfirmedAt == "" {
-		t.Fatalf("timestamps were dropped: %+v", events[0])
-	}
-	if events[1].OccurredOn != "2026-11-21" || events[1].Label != "额度重置" || events[1].ScopeLabel != "Gemini 额度" {
-		t.Fatalf("verified day = %+v", events[1])
-	}
-	if len(events[1].ScheduleDates) != 1 || events[1].ScheduleDates[0] != "2026-11-21" {
-		t.Fatalf("schedule days = %#v", events[1].ScheduleDates)
-	}
-	if events[1].AnnouncedAt == events[1].OccurredOn {
-		t.Fatal("announcement timestamp was stored as the reset day")
-	}
-	if events[2].OccurredOn != "" || len(events[2].ScheduleDates) != 0 {
-		t.Fatalf("invalid or oversized window became days: %+v", events[2])
+	if len(events) != 1 || events[0].Kind != aifeedcontract.ResetKindCard || events[0].Date != "2026-09-04" {
+		t.Fatalf("withdrawn event remained: %+v", events)
 	}
 }
 
@@ -362,6 +428,15 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return fn(req)
+}
+
+func resetTestService(t *testing.T, rawURL string, ttl time.Duration) *Service {
+	t.Helper()
+	service := NewService(Options{Sources: []source{{
+		Key: "codex", Kind: kindReset, Provider: "codex", URL: rawURL, TTL: ttl,
+	}}})
+	service.allowTestHosts = true
+	return service
 }
 
 func testService(t *testing.T, rawURL string, enabled func() bool) *Service {

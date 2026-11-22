@@ -43,10 +43,10 @@ type DailySection struct {
 	UpdatedAt string `json:"updated_at,omitempty"`
 }
 
-// ResetSection is one provider's published reset notices.
+// ResetSection is one provider's calendar facts. It has no post text, author,
+// platform, or source entry. Those stay in the unexported cache for dedup.
 type ResetSection struct {
 	Provider  string       `json:"provider"`
-	PageURL   string       `json:"page_url,omitempty"`
 	Status    string       `json:"status"`
 	Stale     bool         `json:"stale"`
 	FetchedAt string       `json:"fetched_at,omitempty"`
@@ -54,26 +54,24 @@ type ResetSection struct {
 	Events    []ResetEvent `json:"events"`
 }
 
-// ResetEvent is one published announcement. Estimated times stay labeled.
-// OccurredOn is the verified Beijing calendar day. ScheduleDates come from the
-// announcement's own stated window and are not an execution receipt.
-// AnnouncedAt, ConfirmedAt and the cache timestamps are not reset days.
+// ResetEvent is one calendar fact: a Beijing date, the event type, and a
+// factual status. quota_reset and reset_credit are never interchangeable.
+// effective means the public calendar treats the day as landed; announced is
+// still a notice; unconfirmed means the window passed without confirmation.
 type ResetEvent struct {
-	Title         string   `json:"title"`
-	Label         string   `json:"label,omitempty"`
-	ScopeLabel    string   `json:"scope_label,omitempty"`
-	Summary       string   `json:"summary,omitempty"`
-	Original      string   `json:"original,omitempty"`
-	AnnouncedAt   string   `json:"announced_at,omitempty"`
-	ConfirmedAt   string   `json:"confirmed_at,omitempty"`
-	OccurredOn    string   `json:"occurred_on,omitempty"`
-	Schedule      string   `json:"schedule,omitempty"`
-	ScheduleDates []string `json:"schedule_dates,omitempty"`
-	Estimate      string   `json:"estimate,omitempty"`
-	Estimated     bool     `json:"estimated"`
-	OriginalURL   string   `json:"original_url,omitempty"`
-	FeedURL       string   `json:"feed_url,omitempty"`
+	Kind   string `json:"kind"`
+	Status string `json:"status"`
+	Date   string `json:"date"`
 }
+
+const (
+	ResetKindQuota = "quota_reset"
+	ResetKindCard  = "reset_credit"
+
+	ResetStatusEffective   = "effective"
+	ResetStatusAnnounced   = "announced"
+	ResetStatusUnconfirmed = "unconfirmed"
+)
 
 const (
 	StatusOK          = "ok"

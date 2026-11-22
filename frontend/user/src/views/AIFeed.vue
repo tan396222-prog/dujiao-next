@@ -28,7 +28,6 @@
               :group="group"
               :provider-name="providerName(group.provider)"
               :status-text="statusText(group)"
-              :beijing="beijing"
             />
           </div>
         </section>
@@ -113,23 +112,13 @@ type Daily = FeedStatus & {
 }
 
 type ResetEvent = {
-  title: string
-  label?: string
-  scope_label?: string
-  summary?: string
-  original?: string
-  announced_at?: string
-  confirmed_at?: string
-  occurred_on?: string
-  schedule?: string
-  schedule_dates?: string[]
-  estimate?: string
-  estimated?: boolean
+  kind?: string
+  status?: string
+  date?: string
 }
 
 type ResetGroup = FeedStatus & {
   provider: string
-  page_url?: string
   checked_at?: string
   events: ResetEvent[]
 }

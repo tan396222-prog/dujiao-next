@@ -24,13 +24,13 @@ import (
 
 const (
 	attributionName = "AIHOT"
-	maxBodyBytes    = 512 * 1024
+	maxBodyBytes    = 1 << 20
 	requestTimeout  = 8 * time.Second
 	titleRunes      = 120
 	summaryRunes    = 160
 	newsLimit       = 12
 	hotLimit        = 8
-	resetLimit      = 40
+	resetLimit      = 400
 	refusalHold     = 6 * time.Hour
 	backoffCap      = time.Hour
 	userAgent       = "dujiao-storefront-feed/1 (+https://aihot.news/terms)"
@@ -81,16 +81,25 @@ type flight struct {
 }
 
 type cached struct {
-	status    string
-	stale     bool
-	fetchedAt time.Time
-	readyAt   time.Time
-	etag      string
-	failures  int
-	checkedAt string
-	news      []aifeedcontract.NewsItem
-	daily     aifeedcontract.DailySection
-	events    []aifeedcontract.ResetEvent
+	status      string
+	stale       bool
+	fetchedAt   time.Time
+	readyAt     time.Time
+	etag        string
+	failures    int
+	checkedAt   string
+	news        []aifeedcontract.NewsItem
+	daily       aifeedcontract.DailySection
+	resets      []resetRecord
+	historyFrom string
+}
+
+// resetRecord keeps the upstream id and canonical URL for dedup and correction.
+// Neither field is copied into the storefront snapshot.
+type resetRecord struct {
+	id        string
+	sourceURL string
+	event     aifeedcontract.ResetEvent
 }
 
 func defaultSources() []source {
@@ -101,10 +110,10 @@ func defaultSources() []source {
 		{Key: "items", Kind: kindItems, URL: "https://aihot.news/api/v1/items?mode=selected&window=24h&by=timeline&limit=20", TTL: newsTTL, MinGap: newsGap},
 		{Key: "hot", Kind: kindHot, URL: "https://aihot.news/api/v1/hot-topics", TTL: newsTTL, MinGap: newsGap},
 		{Key: "daily", Kind: kindDaily, URL: "https://aihot.news/api/v1/dailies/latest", TTL: newsTTL, MinGap: newsGap},
-		{Key: "codex", Kind: kindReset, Provider: "codex", PageURL: "https://aihot.news/codex-reset", URL: "https://aihot.news/api/v1/codex-resets/recent", TTL: resetTTL, MinGap: resetTTL},
-		{Key: "antigravity", Kind: kindReset, Provider: "antigravity", PageURL: "https://aihot.news/antigravity-reset", URL: "https://aihot.news/api/v1/antigravity-resets/recent", TTL: resetTTL, MinGap: resetTTL},
-		{Key: "claude", Kind: kindReset, Provider: "claude", PageURL: "https://aihot.news/claude-reset", URL: "https://aihot.news/api/v1/claude-resets/recent", TTL: resetTTL, MinGap: resetTTL},
-		{Key: "grok_bot", Kind: kindReset, Provider: "grok_bot", PageURL: "https://aihot.news/grok-bot-reset", URL: "https://aihot.news/api/v1/grok-bot-resets/recent", TTL: resetTTL, MinGap: resetTTL},
+		{Key: "codex", Kind: kindReset, Provider: "codex", PageURL: "https://aihot.news/codex-reset", URL: "https://aihot.news/api/v1/codex-resets", TTL: resetTTL, MinGap: resetTTL},
+		{Key: "antigravity", Kind: kindReset, Provider: "antigravity", PageURL: "https://aihot.news/antigravity-reset", URL: "https://aihot.news/api/v1/antigravity-resets", TTL: resetTTL, MinGap: resetTTL},
+		{Key: "claude", Kind: kindReset, Provider: "claude", PageURL: "https://aihot.news/claude-reset", URL: "https://aihot.news/api/v1/claude-resets", TTL: resetTTL, MinGap: resetTTL},
+		{Key: "grok_bot", Kind: kindReset, Provider: "grok_bot", PageURL: "https://aihot.news/grok-bot-reset", URL: "https://aihot.news/api/v1/grok-bot-resets", TTL: resetTTL, MinGap: resetTTL},
 	}
 }
 
@@ -293,6 +302,10 @@ func (s *Service) fetch(ctx context.Context, src source, etag string) *cached {
 			logger.Warnw("ai_feed_schema_rejected", "source", src.Key)
 			return hold(previous, aifeedcontract.StatusUnavailable, s.backoff(previous, src, 0))
 		}
+		if src.Kind == kindReset {
+			parsedBody.resets = mergeResetRecords(previous, parsedBody, s.now())
+			parsedBody.status = listStatus(len(parsedBody.resets))
+		}
 		parsedBody.fetchedAt = s.now()
 		parsedBody.readyAt = s.now().Add(src.TTL)
 		parsedBody.etag = clipHeader(resp.Header.Get("ETag"))
@@ -393,7 +406,7 @@ func hasPayload(entry *cached) bool {
 	if entry == nil {
 		return false
 	}
-	return len(entry.news) > 0 || len(entry.events) > 0 || entry.daily.Title != "" || entry.daily.Summary != ""
+	return len(entry.news) > 0 || len(entry.resets) > 0 || entry.daily.Title != "" || entry.daily.Summary != ""
 }
 
 func okStatus(entry *cached) string {
@@ -435,11 +448,11 @@ func parseSource(src source, body []byte) (*cached, bool) {
 		}
 		return &cached{status: status, daily: daily}, true
 	case kindReset:
-		events, checkedAt, ok := parseResets(payload)
+		records, checkedAt, historyFrom, ok := parseResets(payload)
 		if !ok {
 			return nil, false
 		}
-		return &cached{status: listStatus(len(events)), events: events, checkedAt: checkedAt}, true
+		return &cached{status: listStatus(len(records)), resets: records, checkedAt: checkedAt, historyFrom: historyFrom}, true
 	default:
 		return nil, false
 	}
@@ -505,91 +518,170 @@ func parseDaily(raw any) (aifeedcontract.DailySection, bool) {
 	}, true
 }
 
-func parseResets(payload map[string]any) ([]aifeedcontract.ResetEvent, string, bool) {
+func parseResets(payload map[string]any) ([]resetRecord, string, string, bool) {
 	rows, ok := payload["events"].([]any)
 	if !ok {
-		return nil, "", false
+		return nil, "", "", false
 	}
-	events := make([]aifeedcontract.ResetEvent, 0, min(len(rows), resetLimit))
+	records := make([]resetRecord, 0, min(len(rows), resetLimit))
 	for _, row := range rows {
-		if len(events) >= resetLimit {
+		if len(records) >= resetLimit {
 			break
 		}
 		record, ok := row.(map[string]any)
 		if !ok {
 			continue
 		}
-		title := plain(asString(record["title"]), titleRunes)
-		summary, original, announced, postURL := firstPost(record["posts"])
-		if title == "" && summary == "" && original == "" {
+		kind := calendarKind(asString(record["type"]))
+		day := calendarDay(record)
+		status := calendarStatus(record)
+		if kind == "" || day == "" || status == "" {
 			continue
 		}
-		if title == "" {
-			title = plain(summary, titleRunes)
-		}
-		label := plain(asString(record["displayLabel"]), 80)
-		if label == "" {
-			legacy := plain(asString(record["label"]), 80)
-			// 旧字段「全员重置」只是兼容标签，不表示所有账号都会重置。
-			if legacy != "" && legacy != "全员重置" {
-				label = legacy
-			}
-		}
-		scopeLabel := ""
-		schedule := ""
-		var scheduleDates []string
-		estimated := false
-		if item, ok := record["schedule"].(map[string]any); ok {
-			schedule = plain(asString(item["label"]), summaryRunes)
-			scheduleDates = announcementScheduleDates(asString(item["from"]), asString(item["through"]))
-			switch asString(item["precision"]) {
-			case "approximate", "date", "window", "deadline":
-				estimated = true
-			}
-		}
-		estimate := ""
-		if item, ok := record["estimate"].(map[string]any); ok && item != nil {
-			estimate = plain(asString(item["label"]), summaryRunes)
-			estimated = true
-		}
-		if presentation, ok := record["presentation"].(map[string]any); ok {
-			scopeLabel = plain(asString(presentation["scopeLabel"]), 80)
-			if truthy(presentation["timeInferred"]) {
-				estimated = true
-			}
-		}
-		feedURL := aihotLink(asString(record["url"]))
-		originalURL := safeLink(postURL)
-		if originalURL == "" {
-			originalURL = safeLink(asString(record["url"]))
-			if aihotLink(originalURL) != "" {
-				originalURL = ""
-			}
-		}
-		events = append(events, aifeedcontract.ResetEvent{
-			Title:         title,
-			Label:         label,
-			ScopeLabel:    scopeLabel,
-			Summary:       summary,
-			Original:      original,
-			AnnouncedAt:   announced,
-			ConfirmedAt:   asString(record["confirmedAt"]),
-			OccurredOn:    beijingCalendarDate(asString(record["occurredOn"])),
-			Schedule:      schedule,
-			ScheduleDates: scheduleDates,
-			Estimate:      estimate,
-			Estimated:     estimated,
-			OriginalURL:   originalURL,
-			FeedURL:       feedURL,
+		records = append(records, resetRecord{
+			id:        asString(record["id"]),
+			sourceURL: asString(record["url"]),
+			event: aifeedcontract.ResetEvent{
+				Kind:   kind,
+				Status: status,
+				Date:   day,
+			},
 		})
 	}
-	return events, asString(payload["checkedAt"]), true
+	return records, asString(payload["checkedAt"]), asString(payload["historyFrom"]), true
+}
+
+func calendarKind(raw string) string {
+	switch raw {
+	case "direct_reset":
+		return aifeedcontract.ResetKindQuota
+	case "reset_credit":
+		return aifeedcontract.ResetKindCard
+	default:
+		return ""
+	}
+}
+
+func calendarStatus(record map[string]any) string {
+	presented := ""
+	if presentation, ok := record["presentation"].(map[string]any); ok {
+		presented = asString(presentation["status"])
+	}
+	switch presented {
+	case "confirmed", "likely_completed":
+		return aifeedcontract.ResetStatusEffective
+	case "announced", "in_progress":
+		return aifeedcontract.ResetStatusAnnounced
+	case "expired_unconfirmed":
+		return aifeedcontract.ResetStatusUnconfirmed
+	}
+	switch asString(record["status"]) {
+	case "confirmed":
+		return aifeedcontract.ResetStatusEffective
+	case "announced":
+		return aifeedcontract.ResetStatusAnnounced
+	default:
+		return ""
+	}
+}
+
+// calendarDay follows the public calendar: a verified occurredOn day wins.
+// Otherwise the Beijing day of confirmedAt, then the newest post's published
+// day, then a schedule that names exactly one Beijing day. A model estimate
+// and a multi-day window are not a reset day. The chosen day is a fact used
+// for the circle; the post itself is not published.
+func calendarDay(record map[string]any) string {
+	if day := beijingCalendarDate(asString(record["occurredOn"])); day != "" {
+		return day
+	}
+	if day := beijingTimestampDate(asString(record["confirmedAt"])); day != "" {
+		return day
+	}
+	if posts, ok := record["posts"].([]any); ok && len(posts) > 0 {
+		if post, ok := posts[0].(map[string]any); ok {
+			if day := beijingTimestampDate(asString(post["publishedAt"])); day != "" {
+				return day
+			}
+		}
+	}
+	if item, ok := record["schedule"].(map[string]any); ok {
+		return singleScheduleDay(asString(item["from"]), asString(item["through"]))
+	}
+	return ""
+}
+
+func singleScheduleDay(fromRaw, throughRaw string) string {
+	from := beijingTimestampDate(fromRaw)
+	through := beijingTimestampDate(throughRaw)
+	if from == "" {
+		return through
+	}
+	if through == "" || through == from {
+		return from
+	}
+	return ""
+}
+
+// recentResetWindow is the short poll payload. Its historyFrom starts inside
+// the last two weeks. A full snapshot's historyFrom is the archive start and
+// replaces the previous list, so a withdrawn event can disappear.
+func recentResetWindow(raw string, now time.Time) bool {
+	parsed, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	age := now.Sub(parsed)
+	return age >= 0 && age < 14*24*time.Hour
+}
+
+func mergeResetRecords(previous, next *cached, now time.Time) []resetRecord {
+	if next == nil {
+		return nil
+	}
+	if previous == nil || !recentResetWindow(next.historyFrom, now) {
+		return capResetRecords(next.resets)
+	}
+	merged := make(map[string]resetRecord, len(previous.resets)+len(next.resets))
+	order := make([]string, 0, len(previous.resets)+len(next.resets))
+	add := func(record resetRecord) {
+		key := resetRecordKey(record)
+		if _, ok := merged[key]; !ok {
+			order = append(order, key)
+		}
+		merged[key] = record
+	}
+	for _, record := range previous.resets {
+		add(record)
+	}
+	for _, record := range next.resets {
+		add(record)
+	}
+	out := make([]resetRecord, 0, len(order))
+	for _, key := range order {
+		out = append(out, merged[key])
+	}
+	return capResetRecords(out)
+}
+
+func resetRecordKey(record resetRecord) string {
+	if record.id != "" {
+		return record.id
+	}
+	return record.event.Kind + "|" + record.event.Date + "|" + record.event.Status
+}
+
+func capResetRecords(records []resetRecord) []resetRecord {
+	if len(records) > resetLimit {
+		return records[:resetLimit]
+	}
+	return records
 }
 
 var shanghai = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 // beijingCalendarDate accepts only a verified YYYY-MM-DD day. A timestamp is
-// not converted, so a confirmation post or a crawl time cannot become a reset day.
+// not accepted here; callers that mean a confirmation or publication instant
+// use beijingTimestampDate and say so.
 func beijingCalendarDate(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if len(raw) != 10 {
@@ -602,57 +694,16 @@ func beijingCalendarDate(raw string) string {
 	return raw
 }
 
-// announcementScheduleDates lists Beijing days covered by the announcement's
-// own stated window. A model estimate is not passed here. A span wider than a
-// week is left unmarked instead of being painted as a cycle.
-func announcementScheduleDates(fromRaw, throughRaw string) []string {
-	from, fromErr := time.Parse(time.RFC3339, strings.TrimSpace(fromRaw))
-	through, throughErr := time.Parse(time.RFC3339, strings.TrimSpace(throughRaw))
-	if fromErr != nil && throughErr != nil {
-		return nil
+func beijingTimestampDate(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || len(raw) == 10 {
+		return ""
 	}
-	if fromErr != nil {
-		from = through
+	parsed, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return ""
 	}
-	if throughErr != nil {
-		through = from
-	}
-	if through.Before(from) {
-		from, through = through, from
-	}
-	start := from.In(shanghai)
-	end := through.In(shanghai)
-	start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, shanghai)
-	end = time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, shanghai)
-	days := make([]string, 0, 4)
-	for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
-		days = append(days, day.Format("2006-01-02"))
-		if len(days) > 7 {
-			return nil
-		}
-	}
-	return days
-}
-
-func firstPost(raw any) (summary string, original string, published string, link string) {
-	rows, ok := raw.([]any)
-	if !ok {
-		return "", "", "", ""
-	}
-	for _, row := range rows {
-		record, ok := row.(map[string]any)
-		if !ok {
-			continue
-		}
-		summary = plain(asString(record["text"]), summaryRunes)
-		original = plain(asString(record["originalText"]), summaryRunes)
-		published = asString(record["publishedAt"])
-		link = asString(record["url"])
-		if summary != "" || original != "" || link != "" {
-			return summary, original, published, link
-		}
-	}
-	return "", "", "", ""
+	return parsed.In(shanghai).Format("2006-01-02")
 }
 
 func itemSection(entry *cached, limit int) aifeedcontract.ItemSection {
@@ -680,13 +731,12 @@ func dailySection(entry *cached) aifeedcontract.DailySection {
 }
 
 func resetSection(src source, entry *cached) aifeedcontract.ResetSection {
-	events := entry.events
-	if events == nil {
-		events = []aifeedcontract.ResetEvent{}
+	events := make([]aifeedcontract.ResetEvent, 0, len(entry.resets))
+	for _, record := range entry.resets {
+		events = append(events, record.event)
 	}
 	return aifeedcontract.ResetSection{
 		Provider:  src.Provider,
-		PageURL:   src.PageURL,
 		Status:    entry.status,
 		Stale:     entry.stale,
 		FetchedAt: formatTime(entry.fetchedAt),
@@ -704,7 +754,6 @@ func disabledSnapshot() aifeedcontract.Snapshot {
 		}
 		resets = append(resets, aifeedcontract.ResetSection{
 			Provider: src.Provider,
-			PageURL:  src.PageURL,
 			Status:   aifeedcontract.StatusDisabled,
 			Events:   []aifeedcontract.ResetEvent{},
 		})
@@ -744,11 +793,6 @@ func schemaV1(value any) bool {
 func asString(value any) string {
 	text, _ := value.(string)
 	return strings.TrimSpace(text)
-}
-
-func truthy(value any) bool {
-	flag, ok := value.(bool)
-	return ok && flag
 }
 
 func formatTime(value time.Time) string {
@@ -840,8 +884,8 @@ func cloneCached(entry *cached) *cached {
 	if entry.news != nil {
 		cloned.news = append([]aifeedcontract.NewsItem(nil), entry.news...)
 	}
-	if entry.events != nil {
-		cloned.events = append([]aifeedcontract.ResetEvent(nil), entry.events...)
+	if entry.resets != nil {
+		cloned.resets = append([]resetRecord(nil), entry.resets...)
 	}
 	return &cloned
 }

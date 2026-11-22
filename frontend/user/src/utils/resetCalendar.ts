@@ -1,10 +1,16 @@
-export type ResetMark = 'confirmed' | 'estimated'
+export type ResetKind = 'quota_reset' | 'reset_credit'
+export type ResetStatus = 'effective' | 'announced' | 'unconfirmed'
 
 export type ResetCalendarEvent = {
-  occurred_on?: string
-  schedule_dates?: string[]
-  announced_at?: string
-  confirmed_at?: string
+  kind?: string
+  status?: string
+  date?: string
+}
+
+export type ResetLine = {
+  kind: ResetKind
+  status: ResetStatus
+  count: number
 }
 
 export type MonthCell = {
@@ -13,6 +19,8 @@ export type MonthCell = {
 }
 
 const dateOnly = /^\d{4}-\d{2}-\d{2}$/
+const kinds = new Set<ResetKind>(['quota_reset', 'reset_credit'])
+const statuses = new Set<ResetStatus>(['effective', 'announced', 'unconfirmed'])
 
 const isDate = (value?: string): value is string => {
   if (typeof value !== 'string' || !dateOnly.test(value)) return false
@@ -25,20 +33,45 @@ const isDate = (value?: string): value is string => {
   return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day
 }
 
-// Confirmed days come only from the verified occurrence date. Schedule days are
-// the announcement's own stated window and stay estimates. Publish, confirmation
-// and fetch timestamps are ignored.
-export const resetMarks = (events: ResetCalendarEvent[]): Map<string, ResetMark> => {
-  const marks = new Map<string, ResetMark>()
+const isKind = (value?: string): value is ResetKind => kinds.has(value as ResetKind)
+const isStatus = (value?: string): value is ResetStatus => statuses.has(value as ResetStatus)
+
+// Facts come only from a typed calendar date. Titles, post text, links and
+// timestamps are ignored even if an older payload still carries them.
+export const resetFacts = (events: ResetCalendarEvent[]): Map<string, ResetLine[]> => {
+  const grouped = new Map<string, Map<string, ResetLine>>()
   for (const event of events) {
-    for (const day of event.schedule_dates || []) {
-      if (isDate(day) && !marks.has(day)) marks.set(day, 'estimated')
+    if (!isDate(event.date) || !isKind(event.kind) || !isStatus(event.status)) continue
+    const lines = grouped.get(event.date) ?? new Map<string, ResetLine>()
+    const key = `${event.kind}:${event.status}`
+    const current = lines.get(key) ?? { kind: event.kind, status: event.status, count: 0 }
+    current.count += 1
+    lines.set(key, current)
+    grouped.set(event.date, lines)
+  }
+  const facts = new Map<string, ResetLine[]>()
+  for (const [date, lines] of grouped) facts.set(date, [...lines.values()])
+  return facts
+}
+
+export const monthCounts = (facts: Map<string, ResetLine[]>, year: number, month: number) => {
+  const prefix = `${year}-${String(month).padStart(2, '0')}-`
+  const counts = { quota: 0, card: 0 }
+  for (const [date, lines] of facts) {
+    if (!date.startsWith(prefix)) continue
+    for (const line of lines) {
+      if (line.kind === 'quota_reset') counts.quota += line.count
+      if (line.kind === 'reset_credit') counts.card += line.count
     }
   }
-  for (const event of events) {
-    if (isDate(event.occurred_on)) marks.set(event.occurred_on, 'confirmed')
-  }
-  return marks
+  return counts
+}
+
+export const dayKind = (lines: ResetLine[] | undefined) => {
+  if (!lines?.length) return ''
+  const kindsInDay = new Set(lines.map((line) => line.kind))
+  if (kindsInDay.size > 1) return 'mixed'
+  return lines[0]?.kind || ''
 }
 
 export const monthGrid = (year: number, month: number): MonthCell[] => {
