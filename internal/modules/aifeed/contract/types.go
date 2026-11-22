@@ -57,7 +57,9 @@ type ResetSection struct {
 // ResetEvent is one calendar fact: a Beijing date, the event type, and a
 // factual status. quota_reset and reset_credit are never interchangeable.
 // effective is an occurredOn day on or before today in Asia/Shanghai.
-// Confirmation posts, publication times, and schedule windows are not emitted.
+// recorded is the calendar attribution day when that verified day is absent.
+// announced is still waiting. unconfirmed means the window passed without
+// confirmation. None of these carry post text or a source name.
 type ResetEvent struct {
 	Kind   string `json:"kind"`
 	Status string `json:"status"`
@@ -69,6 +71,7 @@ const (
 	ResetKindCard  = "reset_credit"
 
 	ResetStatusEffective   = "effective"
+	ResetStatusRecorded    = "recorded"
 	ResetStatusAnnounced   = "announced"
 	ResetStatusUnconfirmed = "unconfirmed"
 )

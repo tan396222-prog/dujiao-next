@@ -220,9 +220,9 @@ func TestRedirectToAnotherHostIsNotFollowed(t *testing.T) {
 }
 
 func TestResetCalendarKeepsTypeAndDropsPosts(t *testing.T) {
-	// Fixture, not a live capture. Only occurredOn on or before the pinned day
-	// is a circle. Confirmation time, publication time, createdAt, and a
-	// schedule window are not.
+	// Fixture, not a live capture. occurredOn is the verified day. Every other
+	// kept day is the calendar attribution day and stays recorded, announced,
+	// or unconfirmed. Post text is still dropped.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
 			"schemaVersion":1,
@@ -294,6 +294,32 @@ func TestResetCalendarKeepsTypeAndDropsPosts(t *testing.T) {
 					"type":"reset_credit",
 					"presentation":{"status":"expired_unconfirmed"},
 					"schedule":{"from":"2026-11-09T08:00:00+08:00","through":"2026-11-09T12:00:00+08:00"}
+				},
+				{
+					"id":"estimate-next-day",
+					"type":"direct_reset",
+					"presentation":{"status":"likely_completed"},
+					"posts":[{"publishedAt":"2026-04-21T22:52:11+08:00"}],
+					"estimate":{"from":"2026-04-22T01:52:00+08:00","through":"2026-04-22T01:52:00+08:00"},
+					"schedule":{"from":"2026-04-22T01:52:00+08:00","through":"2026-04-22T01:52:00+08:00"}
+				},
+				{
+					"id":"utc-crosses-midnight",
+					"type":"direct_reset",
+					"presentation":{"status":"confirmed"},
+					"confirmedAt":"2026-10-25T16:30:00Z"
+				},
+				{
+					"id":"future-announced",
+					"type":"direct_reset",
+					"presentation":{"status":"announced"},
+					"schedule":{"from":"2026-12-02T09:00:00+08:00","through":"2026-12-02T12:00:00+08:00"}
+				},
+				{
+					"id":"future-estimate",
+					"type":"direct_reset",
+					"presentation":{"status":"likely_completed"},
+					"estimate":{"from":"2026-12-05T09:00:00+08:00","through":"2026-12-05T12:00:00+08:00"}
 				}
 			]
 		}`))
@@ -301,12 +327,19 @@ func TestResetCalendarKeepsTypeAndDropsPosts(t *testing.T) {
 	defer server.Close()
 	service := resetTestService(t, server.URL, time.Minute)
 	section := service.Snapshot(context.Background()).Resets[0]
-	if len(section.Events) != 2 {
+	if len(section.Events) != 9 {
 		t.Fatalf("events = %+v", section.Events)
 	}
 	want := []aifeedcontract.ResetEvent{
+		{Kind: aifeedcontract.ResetKindCard, Status: aifeedcontract.ResetStatusRecorded, Date: "2026-11-01"},
 		{Kind: aifeedcontract.ResetKindQuota, Status: aifeedcontract.ResetStatusEffective, Date: "2026-11-21"},
 		{Kind: aifeedcontract.ResetKindCard, Status: aifeedcontract.ResetStatusEffective, Date: "2026-09-23"},
+		{Kind: aifeedcontract.ResetKindQuota, Status: aifeedcontract.ResetStatusRecorded, Date: "2026-10-23"},
+		{Kind: aifeedcontract.ResetKindQuota, Status: aifeedcontract.ResetStatusAnnounced, Date: "2026-11-01"},
+		{Kind: aifeedcontract.ResetKindCard, Status: aifeedcontract.ResetStatusUnconfirmed, Date: "2026-11-09"},
+		{Kind: aifeedcontract.ResetKindQuota, Status: aifeedcontract.ResetStatusRecorded, Date: "2026-04-22"},
+		{Kind: aifeedcontract.ResetKindQuota, Status: aifeedcontract.ResetStatusRecorded, Date: "2026-10-26"},
+		{Kind: aifeedcontract.ResetKindQuota, Status: aifeedcontract.ResetStatusAnnounced, Date: "2026-12-02"},
 	}
 	for index, event := range want {
 		if section.Events[index] != event {
@@ -401,6 +434,53 @@ func TestFullSnapshotRemovesWithdrawnEvent(t *testing.T) {
 	events := service.Snapshot(context.Background()).Resets[0].Events
 	if len(events) != 1 || events[0].Kind != aifeedcontract.ResetKindCard || events[0].Date != "2026-09-04" {
 		t.Fatalf("withdrawn event remained: %+v", events)
+	}
+}
+
+func TestFullSnapshotAddsCorrectionAndWithdrawal(t *testing.T) {
+	var phase atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch phase.Add(1) {
+		case 1:
+			_, _ = w.Write([]byte(`{
+				"schemaVersion":1,"historyFrom":"2026-04-15T00:00:00.000+08:00",
+				"events":[
+					{"id":"move","type":"reset_credit","confirmedAt":"2026-11-01T08:00:00+08:00","presentation":{"status":"confirmed"}},
+					{"id":"stay","type":"direct_reset","occurredOn":"2026-09-04","presentation":{"status":"confirmed"}}
+				]
+			}`))
+		case 2:
+			_, _ = w.Write([]byte(`{
+				"schemaVersion":1,"historyFrom":"2026-04-15T00:00:00.000+08:00",
+				"events":[
+					{"id":"move","type":"reset_credit","confirmedAt":"2026-11-13T08:00:00+08:00","presentation":{"status":"confirmed"}},
+					{"id":"stay","type":"direct_reset","occurredOn":"2026-09-04","presentation":{"status":"confirmed"}},
+					{"id":"added","type":"direct_reset","confirmedAt":"2026-10-26T10:00:00+08:00","presentation":{"status":"confirmed"}}
+				]
+			}`))
+		default:
+			_, _ = w.Write([]byte(`{
+				"schemaVersion":1,"historyFrom":"2026-04-15T00:00:00.000+08:00",
+				"events":[
+					{"id":"move","type":"reset_credit","confirmedAt":"2026-11-13T08:00:00+08:00","presentation":{"status":"confirmed"}},
+					{"id":"stay","type":"direct_reset","occurredOn":"2026-09-04","presentation":{"status":"confirmed"}}
+				]
+			}`))
+		}
+	}))
+	defer server.Close()
+	service := resetTestService(t, server.URL, 0)
+	first := service.Snapshot(context.Background()).Resets[0].Events
+	if len(first) != 2 || first[0].Date != "2026-11-01" || first[0].Status != aifeedcontract.ResetStatusRecorded || first[1].Date != "2026-09-04" {
+		t.Fatalf("first = %+v", first)
+	}
+	second := service.Snapshot(context.Background()).Resets[0].Events
+	if len(second) != 3 || second[0].Date != "2026-11-13" || second[2].Date != "2026-10-26" || second[2].Kind != aifeedcontract.ResetKindQuota {
+		t.Fatalf("correction = %+v", second)
+	}
+	third := service.Snapshot(context.Background()).Resets[0].Events
+	if len(third) != 2 || third[0].Date != "2026-11-13" || third[1].Date != "2026-09-04" {
+		t.Fatalf("withdrawal = %+v", third)
 	}
 }
 

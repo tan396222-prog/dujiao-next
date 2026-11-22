@@ -1,5 +1,5 @@
 export type ResetKind = 'quota_reset' | 'reset_credit'
-export type ResetStatus = 'effective' | 'announced' | 'unconfirmed'
+export type ResetStatus = 'effective' | 'recorded' | 'announced' | 'unconfirmed'
 
 export type ResetCalendarEvent = {
   kind?: string
@@ -20,7 +20,7 @@ export type MonthCell = {
 
 const dateOnly = /^\d{4}-\d{2}-\d{2}$/
 const kinds = new Set<ResetKind>(['quota_reset', 'reset_credit'])
-const statuses = new Set<ResetStatus>(['effective', 'announced', 'unconfirmed'])
+const statuses = new Set<ResetStatus>(['effective', 'recorded', 'announced', 'unconfirmed'])
 
 const isDate = (value?: string): value is string => {
   if (typeof value !== 'string' || !dateOnly.test(value)) return false
@@ -36,12 +36,13 @@ const isDate = (value?: string): value is string => {
 const isKind = (value?: string): value is ResetKind => kinds.has(value as ResetKind)
 const isStatus = (value?: string): value is ResetStatus => statuses.has(value as ResetStatus)
 
-// Facts come only from a typed calendar date on or before today. A later day
-// is not circled. Titles, post text, links and timestamps are ignored.
+// Facts come from a typed calendar date. A later day stays only when it is
+// still announced. Titles, post text, links and timestamps are ignored.
 export const resetFacts = (events: ResetCalendarEvent[], today = shanghaiToday().date): Map<string, ResetLine[]> => {
   const grouped = new Map<string, Map<string, ResetLine>>()
   for (const event of events) {
-    if (!isDate(event.date) || event.date > today || !isKind(event.kind) || !isStatus(event.status)) continue
+    if (!isDate(event.date) || !isKind(event.kind) || !isStatus(event.status)) continue
+    if (event.date > today && event.status !== 'announced') continue
     const lines = grouped.get(event.date) ?? new Map<string, ResetLine>()
     const key = `${event.kind}:${event.status}`
     const current = lines.get(key) ?? { kind: event.kind, status: event.status, count: 0 }

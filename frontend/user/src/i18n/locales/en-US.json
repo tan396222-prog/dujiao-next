@@ -1826,7 +1826,7 @@
   "feed": {
     "title": "News",
     "subtitle": "Public AI news and reset notices. This page has no personal quota and does not ask for an AI account.",
-    "disclaimer": "This page shows public news summaries, and quota resets or reset cards only on a verified occurrence day. It has no personal quota and does not predict an unpublished reset.",
+    "disclaimer": "This page shows public news summaries, plus quota resets and reset cards from the reset calendar. A verified occurrence day says in effect. Every other circled day says recorded. It has no personal quota and does not predict an unpublished reset.",
     "coverage": "Currently covered: {names}",
     "loading": "Reading public news",
     "loadFailed": "Public data could not be read. Checkout and payment are unaffected",
@@ -1835,7 +1835,7 @@
     "newsTitle": "News",
     "hotTitle": "Hot topics",
     "resetsTitle": "Reset notices",
-    "resetsHint": "A red circle marks only a verified occurrence day. Tap a date to see that day's type, status, and count. A record without a verified occurrence day is not circled.",
+    "resetsHint": "Red circles mark quota resets and reset cards. A verified occurrence day says in effect. Any other circled day is the recorded date and does not mean that day was confirmed effective. Tap a date to see that day's type, status, and count.",
     "noResetDate": "None yet",
     "noDateThisMonth": "This month has no quota reset or reset card marked",
     "quotaReset": "Quota reset",
@@ -1844,6 +1844,7 @@
     "eventCount": "{count}",
     "resetStatus": {
       "effective": "In effect",
+      "recorded": "Recorded",
       "announced": "Announced",
       "unconfirmed": "Unconfirmed"
     },

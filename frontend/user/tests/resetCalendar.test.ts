@@ -30,12 +30,16 @@ test('calendar facts keep type and status and ignore posts', () => {
   assert.equal(mixed.find((line) => line.kind === 'quota_reset')?.status, 'announced')
 })
 
-test('a future day is not circled', () => {
+test('a future day is not circled unless it is still announced', () => {
   const facts = resetFacts([
     { kind: 'quota_reset', status: 'effective', date: '2026-11-23' },
+    { kind: 'reset_credit', status: 'recorded', date: '2026-11-01' },
+    { kind: 'quota_reset', status: 'announced', date: '2026-12-02' },
     { kind: 'reset_credit', status: 'effective', date: '2026-11-22' },
   ], '2026-11-22')
   assert.equal(facts.has('2026-11-23'), false)
+  assert.equal(facts.get('2026-11-01')?.[0]?.status, 'recorded')
+  assert.equal(facts.get('2026-12-02')?.[0]?.status, 'announced')
   assert.equal(dayKind(facts.get('2026-11-22')), 'reset_credit')
 })
 

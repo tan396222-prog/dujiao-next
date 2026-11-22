@@ -617,8 +617,8 @@ func parseResets(payload map[string]any, today string) ([]resetRecord, string, s
 			continue
 		}
 		kind := calendarKind(asString(record["type"]))
-		day := occurredOnDay(record, today)
-		if kind == "" || day == "" {
+		day, status := calendarPlacement(record, today)
+		if kind == "" || day == "" || status == "" {
 			continue
 		}
 		records = append(records, resetRecord{
@@ -626,7 +626,7 @@ func parseResets(payload map[string]any, today string) ([]resetRecord, string, s
 			sourceURL: asString(record["url"]),
 			event: aifeedcontract.ResetEvent{
 				Kind:   kind,
-				Status: aifeedcontract.ResetStatusEffective,
+				Status: status,
 				Date:   day,
 			},
 		})
@@ -645,17 +645,73 @@ func calendarKind(raw string) string {
 	}
 }
 
-// occurredOnDay keeps only the upstream's separately verified Beijing day.
-// confirmedAt is the confirmation post time, not an execution time. schedule
-// is the original estimate and is never an execution receipt. publishedAt,
-// createdAt, updatedAt, and checkedAt are record times. A day after today is
-// not circled.
-func occurredOnDay(record map[string]any, today string) string {
-	day := beijingCalendarDate(asString(record["occurredOn"]))
-	if day == "" || today == "" || day > today {
-		return ""
+// calendarPlacement follows the public calendar's own day, then separates a
+// verified occurrence from a record day. occurredOn is the verified Beijing
+// day. Otherwise the day is confirmedAt, then estimate.from, then the newest
+// post's publishedAt, then schedule.from, then createdAt. confirmedAt is the
+// confirmation post time, not an exact execution time, so that day is recorded
+// rather than effective. A future day is kept only while the event is still
+// announced.
+func calendarPlacement(record map[string]any, today string) (string, string) {
+	if day := beijingCalendarDate(asString(record["occurredOn"])); day != "" && (today == "" || day <= today) {
+		return day, aifeedcontract.ResetStatusEffective
 	}
-	return day
+	day := attributionDay(record)
+	if day == "" {
+		return "", ""
+	}
+	status := attributionStatus(record)
+	if today != "" && day > today && status != aifeedcontract.ResetStatusAnnounced {
+		return "", ""
+	}
+	return day, status
+}
+
+func attributionDay(record map[string]any) string {
+	if day := beijingTimestampDate(asString(record["confirmedAt"])); day != "" {
+		return day
+	}
+	if estimate, ok := record["estimate"].(map[string]any); ok {
+		if day := beijingTimestampDate(asString(estimate["from"])); day != "" {
+			return day
+		}
+	}
+	if posts, ok := record["posts"].([]any); ok && len(posts) > 0 {
+		if post, ok := posts[0].(map[string]any); ok {
+			if day := beijingTimestampDate(asString(post["publishedAt"])); day != "" {
+				return day
+			}
+		}
+	}
+	if schedule, ok := record["schedule"].(map[string]any); ok {
+		if day := beijingTimestampDate(asString(schedule["from"])); day != "" {
+			return day
+		}
+	}
+	return beijingTimestampDate(asString(record["createdAt"]))
+}
+
+func attributionStatus(record map[string]any) string {
+	presented := ""
+	if presentation, ok := record["presentation"].(map[string]any); ok {
+		presented = asString(presentation["status"])
+	}
+	switch presented {
+	case "announced", "in_progress":
+		return aifeedcontract.ResetStatusAnnounced
+	case "expired_unconfirmed":
+		return aifeedcontract.ResetStatusUnconfirmed
+	case "confirmed", "likely_completed":
+		return aifeedcontract.ResetStatusRecorded
+	}
+	switch asString(record["status"]) {
+	case "announced":
+		return aifeedcontract.ResetStatusAnnounced
+	case "confirmed":
+		return aifeedcontract.ResetStatusRecorded
+	default:
+		return aifeedcontract.ResetStatusRecorded
+	}
 }
 
 // recentResetWindow is the short poll payload. Its historyFrom starts inside
@@ -726,6 +782,18 @@ func beijingCalendarDate(raw string) string {
 		return ""
 	}
 	return raw
+}
+
+func beijingTimestampDate(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || len(raw) == 10 {
+		return ""
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, raw)
+	if err != nil {
+		return ""
+	}
+	return parsed.In(shanghai).Format("2006-01-02")
 }
 
 func shanghaiDate(now time.Time) string {
