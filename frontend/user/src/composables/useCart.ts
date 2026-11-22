@@ -10,6 +10,7 @@ import {
   cartItemPurchaseMin as itemPurchaseMin,
 } from '../utils/cartStock'
 import { getImageUrl } from '../utils/image'
+import { resolveCartStockTier, stockTierMessageKey } from '../utils/publicStock'
 import { useLocalized } from './useProduct'
 import { toast } from './useToast'
 
@@ -162,7 +163,7 @@ export function useCart() {
     const available = itemAvailableStock(item)
     const purchaseLimit = itemPurchaseLimit(item)
     const maxQuantity = itemMaxQuantity(item)
-    if (available === null) return ''
+    if (available === null) return t(stockTierMessageKey(resolveCartStockTier(item)))
     if (available <= 0) return t('products.stockTier.unavailable')
     if (purchaseLimit !== null && maxQuantity === purchaseLimit && purchaseLimit < available) {
       return t('cart.maxPurchaseExceeded', { count: purchaseLimit })

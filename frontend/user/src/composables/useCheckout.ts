@@ -12,6 +12,7 @@ import { amountToCents, basisPointsToPercent, centsToAmount, parseInteger, rateT
 import { buildSkuDisplayText, normalizeSkuId } from '../utils/sku'
 import { refreshCartStockSnapshots, cartItemPurchaseLimit as itemPurchaseLimit, cartItemPurchaseMin as itemPurchaseMin } from '../utils/cartStock'
 import { getImageUrl } from '../utils/image'
+import { resolveCartStockTier, stockTierMessageKey } from '../utils/publicStock'
 import { getAffiliateCode, getAffiliateVisitorKey } from '../utils/affiliate'
 import { protectionHeaders, requestProtection } from '../utils/paymentProtection'
 import { saveGuestOrderAuth } from '../utils/guestOrderAuth'
@@ -1129,7 +1130,7 @@ export function useCheckout() {
     if (itemMinNotMet(item)) {
       return t('cart.minPurchaseNotMet', { count: itemPurchaseMin(item) })
     }
-    if (available === null && purchaseLimit === null) return ''
+    if (available === null && purchaseLimit === null) return t(stockTierMessageKey(resolveCartStockTier(item)))
     if (maxQuantity <= 0) return t('cart.stockOut')
     if (itemStockExceeded(item)) {
       if (purchaseLimit !== null && maxQuantity === purchaseLimit && (available === null || purchaseLimit < available)) {
@@ -1139,7 +1140,7 @@ export function useCheckout() {
       if (maxQuantity <= 20) return t('products.stockTier.mid')
       return t('products.stockTier.high')
     }
-    if (available === null) return ''
+    if (available === null) return t(stockTierMessageKey(resolveCartStockTier(item)))
     if (available <= 0) return t('products.stockTier.unavailable')
     if (available <= 5) return t('products.stockTier.low')
     if (available <= 20) return t('products.stockTier.mid')

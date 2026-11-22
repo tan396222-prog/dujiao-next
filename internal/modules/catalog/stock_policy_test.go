@@ -65,14 +65,23 @@ func TestStockQuantityAndMasking(t *testing.T) {
 	if got := StockQuantity(constants.FulfillmentTypeManual, 9, 4); got != 4 {
 		t.Fatalf("manual quantity want 4 got %d", got)
 	}
-	if got := MaskStockInt(constants.ProductStockDisplayStatus, 42); got != 1 {
-		t.Fatalf("masked positive stock want 1 got %d", got)
+	if got := MaskStockInt(constants.ProductStockDisplayStatus, 42); got != 0 {
+		t.Fatalf("masked positive stock want 0 got %d", got)
+	}
+	if got := MaskStockInt(constants.ProductStockDisplayHidden, 1); got != 0 {
+		t.Fatalf("masked single unit want 0 got %d", got)
 	}
 	if got := MaskStockInt(constants.ProductStockDisplayStatus, constants.ManualStockUnlimited); got != constants.ManualStockUnlimited {
 		t.Fatalf("masked unlimited stock want %d got %d", constants.ManualStockUnlimited, got)
 	}
-	if got := MaskStockInt64(constants.ProductStockDisplayRange, 42); got != 1 {
-		t.Fatalf("masked int64 stock want 1 got %d", got)
+	if got := MaskStockInt64(constants.ProductStockDisplayRange, 42); got != 0 {
+		t.Fatalf("masked int64 stock want 0 got %d", got)
+	}
+	if got := MaskStockInt64(constants.ProductStockDisplayExact, 1); got != 1 {
+		t.Fatalf("exact int64 stock want 1 got %d", got)
+	}
+	if got := MaskStockInt64(constants.ProductStockDisplayRange, int64(constants.ManualStockUnlimited)); got != int64(constants.ManualStockUnlimited) {
+		t.Fatalf("range mode must keep an already unlimited count, got %d", got)
 	}
 	if got := MaskSoldCount(constants.ProductStockDisplayHidden, 17); got != 0 {
 		t.Fatalf("masked sold count want 0 got %d", got)

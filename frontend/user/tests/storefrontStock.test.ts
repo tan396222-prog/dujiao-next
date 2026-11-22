@@ -26,6 +26,59 @@ test('storefront stock tiers hide the exact count and allow manual or auto presa
     stock_status: 'in_stock',
     manual_stock_available: 0,
   }), 'high')
+  assert.equal(resolveStockTier({
+    fulfillment_type: 'auto',
+    stock_display_mode: 'range',
+    stock_quantity_hidden: true,
+    stock_status: 'low_stock',
+    stock_display: 'range_1_5',
+    auto_stock_available: 0,
+    backorder: true,
+  }), 'low')
+  assert.equal(resolveStockTier({
+    fulfillment_type: 'auto',
+    stock_display_mode: 'range',
+    stock_quantity_hidden: true,
+    stock_status: 'in_stock',
+    stock_display: 'range_6_20',
+    auto_stock_available: 0,
+    backorder: true,
+  }), 'mid')
+  assert.equal(resolveStockTier({
+    fulfillment_type: 'auto',
+    stock_display_mode: 'range',
+    stock_quantity_hidden: true,
+    stock_status: 'in_stock',
+    stock_display: 'range_21_50',
+    auto_stock_available: 0,
+    backorder: true,
+  }), 'high')
+  assert.equal(resolveStockTier({
+    fulfillment_type: 'auto',
+    stock_display_mode: 'range',
+    stock_quantity_hidden: true,
+    stock_status: 'out_of_stock',
+    auto_stock_available: 0,
+    backorder: true,
+  }), 'presale')
+  assert.equal(resolveStockTier({
+    fulfillment_type: 'auto',
+    stock_display_mode: 'exact',
+    stock_quantity_hidden: false,
+    auto_stock_available: 1,
+  }), 'low')
+  assert.equal(resolveStockTier({
+    fulfillment_type: 'auto',
+    stock_display_mode: 'exact',
+    stock_quantity_hidden: false,
+    auto_stock_available: 20,
+  }), 'mid')
+  assert.equal(resolveStockTier({
+    fulfillment_type: 'auto',
+    stock_display_mode: 'exact',
+    stock_quantity_hidden: false,
+    auto_stock_available: 21,
+  }), 'high')
   assert.equal(stockTierMessageKey('presale').includes('stockTier'), true)
   for (const tier of ['presale', 'low', 'mid', 'high', 'unavailable'] as const) {
     assert.equal(/\d/.test(stockTierMessageKey(tier)), false)

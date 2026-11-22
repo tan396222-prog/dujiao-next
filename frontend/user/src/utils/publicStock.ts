@@ -137,12 +137,22 @@ const productStockQuantity = (product: any): number | null => {
   return total
 }
 
+const tierFromHiddenDisplay = (product: any, status: string, display: string): StockTier => {
+  if (status === STOCK_STATUS_OUT_OF_STOCK) return allowsBackorder(product) ? 'presale' : 'unavailable'
+  if (status === STOCK_STATUS_UNLIMITED) return 'high'
+  if (display === 'range_1_5') return 'low'
+  if (display === 'range_6_20') return 'mid'
+  if (display.startsWith('range_')) return 'high'
+  if (status === STOCK_STATUS_LOW_STOCK) return 'low'
+  return 'high'
+}
+
 export const resolveStockTier = (product: any, sku?: any): StockTier => {
-  const status = String((sku || product)?.stock_status || product?.stock_status || '')
+  const subject = sku || product
+  const status = String(subject?.stock_status || product?.stock_status || '')
   if (isQuantityHidden(product, sku)) {
-    if (status === STOCK_STATUS_OUT_OF_STOCK) return allowsBackorder(product) ? 'presale' : 'unavailable'
-    if (status === STOCK_STATUS_LOW_STOCK) return 'low'
-    return 'high'
+    const display = String(subject?.stock_display || product?.stock_display || '')
+    return tierFromHiddenDisplay(product, status, display)
   }
   const available = sku ? resolveSkuAvailableStock(product, sku) : productStockQuantity(product)
   if (available === null) {
@@ -156,6 +166,26 @@ export const resolveStockTier = (product: any, sku?: any): StockTier => {
   if (available <= 20) return 'mid'
   return 'high'
 }
+
+export const resolveCartStockTier = (item: {
+  fulfillmentType?: string
+  skuStockQuantityHidden?: boolean
+  skuStockDisplayMode?: string
+  skuStockStatus?: string
+  skuStockDisplay?: string
+  skuAutoStockAvailable?: number
+  skuManualStockTotal?: number
+  skuUpstreamStock?: number
+}): StockTier => resolveStockTier({
+  fulfillment_type: item.fulfillmentType,
+  stock_display_mode: item.skuStockDisplayMode,
+  stock_quantity_hidden: item.skuStockQuantityHidden,
+  stock_status: item.skuStockStatus,
+  stock_display: item.skuStockDisplay,
+  auto_stock_available: item.skuAutoStockAvailable,
+  manual_stock_total: item.skuManualStockTotal,
+  upstream_stock: item.skuUpstreamStock,
+})
 
 export const stockTierMessageKey = (tier: StockTier) => {
   switch (tier) {

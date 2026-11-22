@@ -143,19 +143,17 @@ func StockQuantity(fulfillmentType string, autoStockAvailable int64, manualStock
 	return int64(manualStockAvailable)
 }
 
-// MaskStockInt 在非精确展示模式中隐藏真实库存数量，同时保留售罄/有货/无限语义。
+// MaskStockInt 在非精确展示模式中去掉可还原的正库存。
+// 0 仍表示没有可售数量，-1 仍表示原本的无限库存。有限正库存不再回 1，
+// 以免和“只剩 1”无法区分，也不改成 -1。
 func MaskStockInt(mode string, value int) int {
 	if NormalizeStockDisplayMode(mode) == constants.ProductStockDisplayExact {
 		return value
 	}
-	switch {
-	case value == constants.ManualStockUnlimited:
+	if value == constants.ManualStockUnlimited {
 		return constants.ManualStockUnlimited
-	case value <= 0:
-		return 0
-	default:
-		return 1
 	}
+	return 0
 }
 
 // MaskStockInt64 是 int64 库存的隐藏版本。
@@ -163,14 +161,10 @@ func MaskStockInt64(mode string, value int64) int64 {
 	if NormalizeStockDisplayMode(mode) == constants.ProductStockDisplayExact {
 		return value
 	}
-	switch {
-	case value == int64(constants.ManualStockUnlimited):
+	if value == int64(constants.ManualStockUnlimited) {
 		return int64(constants.ManualStockUnlimited)
-	case value <= 0:
-		return 0
-	default:
-		return 1
 	}
+	return 0
 }
 
 // MaskSoldCount 避免非精确库存模式通过已售数量反推出真实库存。
