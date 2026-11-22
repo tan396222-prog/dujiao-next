@@ -91,8 +91,8 @@
                 </h3>
 
                 <div class="mt-1.5 flex flex-wrap items-center gap-1">
-                  <Badge :variant="product.fulfillment_type === 'auto' ? 'info' : 'neutral'" size="xs">
-                    {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
+                  <Badge :variant="showsAutomaticDelivery(product) ? 'info' : 'neutral'" size="xs">
+                    {{ getFulfillmentTypeLabel(product) }}
                   </Badge>
                   <Badge :variant="getStockBadgeVariant(product.stock_status)" size="xs">
                     {{ getStockStatusLabel(product) }}
@@ -369,6 +369,7 @@ const userProfileStore = useUserProfileStore()
 const { getLocalizedText, siteCurrency, formatPrice } = useLocalized()
 const {
   getFulfillmentTypeLabel,
+  showsAutomaticDelivery,
   getStockBadgeVariant,
   getStockStatusLabel,
   isSoldOut,
@@ -748,6 +749,7 @@ const handleAddToCart = () => {
     maxPurchaseQuantity: normalizeOptionalLimitNumber(props.product.max_purchase_quantity) ?? undefined,
     purchaseType: props.product.purchase_type,
     fulfillmentType: props.product.fulfillment_type,
+    couponSale: props.product.coupon_sale === true,
     manualFormSchema: props.product.manual_form_schema || {},
     paymentChannelIds: Array.isArray(props.product.payment_channel_ids) && props.product.payment_channel_ids.length > 0 ? props.product.payment_channel_ids : undefined,
     quantity: 1,
@@ -802,6 +804,7 @@ const handleBuyNow = () => {
     maxPurchaseQuantity: normalizeOptionalLimitNumber(props.product.max_purchase_quantity) ?? undefined,
     purchaseType: props.product.purchase_type,
     fulfillmentType: props.product.fulfillment_type,
+    couponSale: props.product.coupon_sale === true,
     manualFormSchema: props.product.manual_form_schema || {},
     paymentChannelIds: Array.isArray(props.product.payment_channel_ids) && props.product.payment_channel_ids.length > 0 ? props.product.payment_channel_ids : undefined,
     quantity: quantity.value,

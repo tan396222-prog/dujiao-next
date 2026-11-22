@@ -55,18 +55,24 @@ type ResetSection struct {
 }
 
 // ResetEvent is one published announcement. Estimated times stay labeled.
+// OccurredOn is the verified Beijing calendar day. ScheduleDates come from the
+// announcement's own stated window and are not an execution receipt.
+// AnnouncedAt, ConfirmedAt and the cache timestamps are not reset days.
 type ResetEvent struct {
-	Title       string `json:"title"`
-	Label       string `json:"label,omitempty"`
-	Summary     string `json:"summary,omitempty"`
-	Original    string `json:"original,omitempty"`
-	AnnouncedAt string `json:"announced_at,omitempty"`
-	ConfirmedAt string `json:"confirmed_at,omitempty"`
-	Schedule    string `json:"schedule,omitempty"`
-	Estimate    string `json:"estimate,omitempty"`
-	Estimated   bool   `json:"estimated"`
-	OriginalURL string `json:"original_url,omitempty"`
-	FeedURL     string `json:"feed_url,omitempty"`
+	Title         string   `json:"title"`
+	Label         string   `json:"label,omitempty"`
+	ScopeLabel    string   `json:"scope_label,omitempty"`
+	Summary       string   `json:"summary,omitempty"`
+	Original      string   `json:"original,omitempty"`
+	AnnouncedAt   string   `json:"announced_at,omitempty"`
+	ConfirmedAt   string   `json:"confirmed_at,omitempty"`
+	OccurredOn    string   `json:"occurred_on,omitempty"`
+	Schedule      string   `json:"schedule,omitempty"`
+	ScheduleDates []string `json:"schedule_dates,omitempty"`
+	Estimate      string   `json:"estimate,omitempty"`
+	Estimated     bool     `json:"estimated"`
+	OriginalURL   string   `json:"original_url,omitempty"`
+	FeedURL       string   `json:"feed_url,omitempty"`
 }
 
 const (

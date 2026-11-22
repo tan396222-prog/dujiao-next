@@ -219,7 +219,12 @@
   "announcement": {
     "close": "关闭",
     "dismissToday": "今日不再提示",
-    "dismissForever": "不再提示"
+    "dismissForever": "不再提示",
+    "wechatLabel": "微信号",
+    "wechatHint": "可复制微信号，或长按二维码添加。",
+    "wechatCopy": "复制微信号",
+    "wechatCopied": "微信号已复制",
+    "wechatQrAlt": "微信二维码"
   },
   "about": {
     "title": "关于我们",
@@ -248,7 +253,7 @@
   "bottomNav": {
     "home": "首页",
     "products": "商品",
-    "invite": "邀请",
+    "invite": "返钱",
     "feed": "资讯",
     "cart": "购物车",
     "me": "我的"
@@ -540,7 +545,8 @@
         "affiliate_commission_reversal": "推广佣金冲回",
         "admin_adjust": "管理员调账",
         "admin_refund": "管理员退款",
-        "order_underpaid_credit": "订单收款不足转入"
+        "order_underpaid_credit": "订单收款不足转入",
+        "daily_checkin": "每日签到"
       },
       "errors": {
         "loadFailed": "钱包数据加载失败，请稍后重试",
@@ -552,9 +558,26 @@
         "rechargeStateFailed": "充值支付未成功，请更换渠道后重试"
       }
     },
+    "checkin": {
+      "title": "每日签到",
+      "subtitle": "每个北京时间自然日可签到一次，随机获得 0.10 到 0.80 元，进入购物余额。余额仅用于站内购物，不支持提现。",
+      "claim": "签到",
+      "claiming": "签到中",
+      "claimed": "今日已签到",
+      "reward": "本次奖励",
+      "balance": "当前购物余额",
+      "tomorrow": "北京时间 {date} 零点后可以再次签到",
+      "debtNote": "奖励全额进入购物余额，不抵扣未追回推广佣金，也不改变 3% 返佣规则。",
+      "debtOffset": "本次有 {amount} 元用于抵扣未追回推广佣金。",
+      "errors": {
+        "loadFailed": "签到状态加载失败，请稍后重试",
+        "claimFailed": "签到失败，请稍后重试"
+      }
+    },
     "affiliate": {
       "title": "推广返利",
-      "subtitle": "开通后获得专属邀请链接。确认后的佣金进入可购物余额，可直接余额支付。",
+      "subtitle": "开通后获得专属邀请链接。确认后的佣金进入可购物余额，可直接余额支付。余额仅用于站内购物，不支持提现。",
+      "balanceShopOnly": "返佣和签到进入购物余额，仅用于站内购物，不支持提现。",
       "notOpened": "你还没有开通推广返利，开通后可获得专属联盟ID与推广链接。",
       "openButton": "立即开通",
       "opening": "开通中...",
@@ -565,8 +588,8 @@
       "conversionRate": "转化率",
       "conversionDetail": "点击 {clicks} · 有效订单 {orders}",
       "pendingCommission": "待确认佣金",
-      "availableCommission": "可提现佣金",
-      "withdrawnCommission": "累计提现佣金",
+      "availableCommission": "可购物佣金",
+      "withdrawnCommission": "历史已提现佣金",
       "withdrawTitle": "申请提现",
       "withdrawSubtitle": "填写金额、提现渠道和账号后提交审核",
       "withdrawAmountLabel": "提现金额",
@@ -1687,7 +1710,7 @@
     "fulfillmentTypes": {
       "manual": "人工交付",
       "auto": "自动交付",
-      "coupon": "优惠码"
+      "coupon": "自动交付"
     },
     "fulfillmentStatuses": {
       "pending": "待交付",
@@ -1811,7 +1834,26 @@
     "newsTitle": "新闻",
     "hotTitle": "热门话题",
     "resetsTitle": "重置公告",
-    "resetsHint": "只展示已经发布的公告。标注预计的时间不是精确承诺。",
+    "resetsHint": "只标出公告里已经核对的重置日。预计来自公告自己写明的时间，不是承诺，也不按周期往后推。",
+    "noResetDate": "暂无",
+    "noDateThisMonth": "这个月还没有可标出的重置日",
+    "confirmedMark": "已确认",
+    "estimatedMark": "预计",
+    "estimatedNote": "预计不是精确承诺",
+    "today": "今天",
+    "previousMonth": "上个月",
+    "nextMonth": "下个月",
+    "dayConfirmed": "{date}，已确认的重置日",
+    "dayEstimated": "{date}，预计，不是承诺",
+    "weekday": {
+      "mon": "一",
+      "tue": "二",
+      "wed": "三",
+      "thu": "四",
+      "fri": "五",
+      "sat": "六",
+      "sun": "日"
+    },
     "noDaily": "当前没有每日摘要",
     "noNews": "当前没有新闻",
     "noHot": "当前没有热门话题",

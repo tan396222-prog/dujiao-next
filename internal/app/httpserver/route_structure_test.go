@@ -60,6 +60,7 @@ func TestRouteDomainFilesPreserveTrustBoundaries(t *testing.T) {
 				`apicredentialtransport.RegisterUserRoutes(user, userApiCredentialHandler)`,
 				`auditlogtransport.RegisterUserRoutes(user, userAuditLogHandler)`,
 				`giftcardtransport.RegisterUserRoutes(giftCardRedeem, userGiftCardHandler)`,
+				`checkinhttp.RegisterUserRoutes(user, checkinhttp.NewUserHandler(c.CheckInService), middleware.RateLimitMiddleware(redisClient, checkInRule, middleware.KeyByUserIDAndIP))`,
 				`wallettransport.RegisterUserRoutes(user, userWalletHandler)`,
 				`memberleveltransport.RegisterUserRoutes(user, userMemberLevelHandler)`,
 				`userauthtransport.RegisterUserProfileRoutes(user, userProfileHandler)`,

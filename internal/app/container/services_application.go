@@ -16,6 +16,8 @@ import (
 	cardsecretapp "github.com/dujiao-next/internal/modules/cardsecret/application"
 	cartapp "github.com/dujiao-next/internal/modules/cart/application"
 	categoryapp "github.com/dujiao-next/internal/modules/catalog/category/application"
+	checkinapp "github.com/dujiao-next/internal/modules/checkin/application"
+	checkinwallet "github.com/dujiao-next/internal/modules/checkin/infrastructure/walletbalance"
 	contentapp "github.com/dujiao-next/internal/modules/content/application"
 	couponapp "github.com/dujiao-next/internal/modules/coupon/application"
 	couponproductadapter "github.com/dujiao-next/internal/modules/coupon/infrastructure/productadapter"
@@ -35,6 +37,7 @@ import (
 	sitemapcache "github.com/dujiao-next/internal/modules/sitemap/infrastructure/cacheadapter"
 	sitemapcatalog "github.com/dujiao-next/internal/modules/sitemap/infrastructure/catalogreader"
 	walletapp "github.com/dujiao-next/internal/modules/wallet/application"
+	dailycheckingormuow "github.com/dujiao-next/internal/workflows/dailycheckin/infrastructure/gormuow"
 	giftcardredeemgormuow "github.com/dujiao-next/internal/workflows/giftcardredeem/infrastructure/gormuow"
 )
 
@@ -152,6 +155,13 @@ func (c *Container) initApplicationServices() {
 		Users:    c.UserStore,
 		Currency: giftcardsettingscurrency.New(c.SettingService),
 		Redeemer: giftcardredeemgormuow.New(c.GiftCardRepo, c.WalletService),
+	})
+	c.CheckInService = checkinapp.NewService(checkinapp.Options{
+		Users:    c.UserStore,
+		CheckIns: c.CheckInRepo,
+		Balances: checkinwallet.New(c.WalletRepo),
+		Runner:   dailycheckingormuow.New(c.CheckInRepo, c.WalletService),
+		Rewards:  checkinapp.CryptoReward{},
 	})
 	c.CouponAdminService = couponapp.NewAdminService(c.CouponRepo).WithSKUDirectory(couponproductadapter.New(c.ProductSKURepo))
 	c.PromotionAdminService = promotionapp.NewAdminService(c.PromotionRepo)

@@ -249,12 +249,77 @@ func TestResetEstimateIsLabeledAndFullTextIsDropped(t *testing.T) {
 	if !event.Estimated || event.Estimate != "模型推算窗口" || event.Summary != "中文摘要" {
 		t.Fatalf("event = %+v", event)
 	}
+	if event.OccurredOn != "" || len(event.ScheduleDates) != 0 {
+		t.Fatalf("an estimate became a calendar day: %+v", event)
+	}
 	if event.Original != "original notice" || event.FeedURL != "https://aihot.news/codex-reset" {
 		t.Fatalf("links = %+v", event)
 	}
 	raw, _ := json.Marshal(snapshot)
 	if contains(string(raw), "SHOULD NOT APPEAR") {
 		t.Fatal("full text leaked")
+	}
+}
+
+func TestResetCalendarUsesVerifiedDayNotPublishTime(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"schemaVersion":1,
+			"checkedAt":"2026-11-22T20:23:00+08:00",
+			"events":[
+				{
+					"title":"只有确认帖时间",
+					"label":"全员重置",
+					"confirmedAt":"2026-11-21T17:18:00+08:00",
+					"occurredOn":null,
+					"estimate":{"from":"2026-11-21T12:00:00+08:00","through":"2026-11-21T18:00:00+08:00","basis":"model","label":"模型窗口","reason":"history"},
+					"posts":[{"text":"摘要","publishedAt":"2026-11-21T17:18:00+08:00","url":"https://x.com/example/status/1"}]
+				},
+				{
+					"title":"已核对的重置日",
+					"displayLabel":"额度重置",
+					"confirmedAt":"2026-11-21T17:18:00+08:00",
+					"occurredOn":"2026-11-21",
+					"schedule":{"precision":"date","label":"公告写明 11 月 21 日","from":"2026-11-20T16:00:00Z","through":"2026-11-21T15:59:00Z"},
+					"presentation":{"status":"confirmed","scopeKnown":true,"scopeLabel":"Gemini 额度","kindExplicit":true,"timeInferred":false},
+					"posts":[{"text":"公告摘要","publishedAt":"2026-11-22T01:00:00Z"}]
+				},
+				{
+					"title":"跨周的含糊窗口",
+					"displayLabel":"额度重置",
+					"occurredOn":"2026-02-31",
+					"schedule":{"precision":"window","label":"这个月某个时候","from":"2026-11-01T00:00:00+08:00","through":"2026-11-20T00:00:00+08:00"},
+					"posts":[{"text":"窗口太宽"}]
+				}
+			]
+		}`))
+	}))
+	defer server.Close()
+	service := NewService(Options{Sources: []source{{
+		Key: "codex", Kind: kindReset, Provider: "codex", PageURL: "https://aihot.news/codex-reset", URL: server.URL, TTL: time.Minute, MinGap: time.Minute,
+	}}})
+	service.allowTestHosts = true
+	events := service.Snapshot(context.Background()).Resets[0].Events
+	if len(events) != 3 {
+		t.Fatalf("events = %+v", events)
+	}
+	if events[0].OccurredOn != "" || len(events[0].ScheduleDates) != 0 || events[0].Label != "" {
+		t.Fatalf("publish time or legacy everyone label became a reset: %+v", events[0])
+	}
+	if events[0].AnnouncedAt == "" || events[0].ConfirmedAt == "" {
+		t.Fatalf("timestamps were dropped: %+v", events[0])
+	}
+	if events[1].OccurredOn != "2026-11-21" || events[1].Label != "额度重置" || events[1].ScopeLabel != "Gemini 额度" {
+		t.Fatalf("verified day = %+v", events[1])
+	}
+	if len(events[1].ScheduleDates) != 1 || events[1].ScheduleDates[0] != "2026-11-21" {
+		t.Fatalf("schedule days = %#v", events[1].ScheduleDates)
+	}
+	if events[1].AnnouncedAt == events[1].OccurredOn {
+		t.Fatal("announcement timestamp was stored as the reset day")
+	}
+	if events[2].OccurredOn != "" || len(events[2].ScheduleDates) != 0 {
+		t.Fatalf("invalid or oversized window became days: %+v", events[2])
 	}
 }
 

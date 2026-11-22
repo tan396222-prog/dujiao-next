@@ -138,6 +138,7 @@ export const refreshCartStockSnapshots = async (cartStore: CartStoreLike) => {
       minPurchaseQuantity: normalizeOptionalLimitNumber(product?.min_purchase_quantity),
       maxPurchaseQuantity: normalizeOptionalLimitNumber(product?.max_purchase_quantity),
       fulfillmentType: String(product?.fulfillment_type || item.fulfillmentType || ''),
+      couponSale: product?.coupon_sale === true,
       manualFormSchema: product?.manual_form_schema || {},
     })
   }

@@ -89,6 +89,9 @@ func (s *Service) ListByUser(userID uint) ([]ItemDetail, error) {
 		if fulfillmentType == "" {
 			fulfillmentType = constants.FulfillmentTypeManual
 		}
+		if product.CouponSale {
+			fulfillmentType = constants.FulfillmentTypeCoupon
+		}
 
 		details = append(details, ItemDetail{
 			ProductID:       item.ProductID,

@@ -13,7 +13,7 @@
     #boot {
       position: fixed;
       inset: 0;
-      z-index: 80;
+      z-index: 140;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -85,6 +85,15 @@
       color: #3e3458;
       font: 600 14px/1.4 -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif;
     }
+    #boot-vibrate {
+      margin: 22px 0 0;
+      border: 0;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.9);
+      color: #24183a;
+      font: 700 14px/1.2 -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif;
+      padding: 8px 16px;
+    }
     #boot-fail button {
       display: block;
       margin: 10px auto 0;
@@ -150,6 +159,7 @@
         </svg>
         </div>
       </div>
+      <button id="boot-vibrate" type="button" hidden></button>
       <p id="boot-fail" hidden></p>
     </div>
   </div>
@@ -212,6 +222,11 @@
         fail.appendChild(button)
       }, hardMs)
     })()
+  </script>
+  <script type="module">
+    import { attachOpeningVibration } from './src/utils/openingVibration.ts'
+    var boot = document.getElementById('boot')
+    if (boot) attachOpeningVibration(boot)
   </script>
   <script type="module" data-cfasync="false" src="/src/main.ts"></script>
 </body>

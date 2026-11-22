@@ -30,7 +30,7 @@ const (
 	summaryRunes    = 160
 	newsLimit       = 12
 	hotLimit        = 8
-	resetLimit      = 6
+	resetLimit      = 40
 	refusalHold     = 6 * time.Hour
 	backoffCap      = time.Hour
 	userAgent       = "dujiao-storefront-feed/1 (+https://aihot.news/terms)"
@@ -529,12 +529,19 @@ func parseResets(payload map[string]any) ([]aifeedcontract.ResetEvent, string, b
 		}
 		label := plain(asString(record["displayLabel"]), 80)
 		if label == "" {
-			label = plain(asString(record["label"]), 80)
+			legacy := plain(asString(record["label"]), 80)
+			// 旧字段「全员重置」只是兼容标签，不表示所有账号都会重置。
+			if legacy != "" && legacy != "全员重置" {
+				label = legacy
+			}
 		}
+		scopeLabel := ""
 		schedule := ""
+		var scheduleDates []string
 		estimated := false
 		if item, ok := record["schedule"].(map[string]any); ok {
 			schedule = plain(asString(item["label"]), summaryRunes)
+			scheduleDates = announcementScheduleDates(asString(item["from"]), asString(item["through"]))
 			switch asString(item["precision"]) {
 			case "approximate", "date", "window", "deadline":
 				estimated = true
@@ -545,8 +552,11 @@ func parseResets(payload map[string]any) ([]aifeedcontract.ResetEvent, string, b
 			estimate = plain(asString(item["label"]), summaryRunes)
 			estimated = true
 		}
-		if presentation, ok := record["presentation"].(map[string]any); ok && truthy(presentation["timeInferred"]) {
-			estimated = true
+		if presentation, ok := record["presentation"].(map[string]any); ok {
+			scopeLabel = plain(asString(presentation["scopeLabel"]), 80)
+			if truthy(presentation["timeInferred"]) {
+				estimated = true
+			}
 		}
 		feedURL := aihotLink(asString(record["url"]))
 		originalURL := safeLink(postURL)
@@ -557,20 +567,71 @@ func parseResets(payload map[string]any) ([]aifeedcontract.ResetEvent, string, b
 			}
 		}
 		events = append(events, aifeedcontract.ResetEvent{
-			Title:       title,
-			Label:       label,
-			Summary:     summary,
-			Original:    original,
-			AnnouncedAt: announced,
-			ConfirmedAt: asString(record["confirmedAt"]),
-			Schedule:    schedule,
-			Estimate:    estimate,
-			Estimated:   estimated,
-			OriginalURL: originalURL,
-			FeedURL:     feedURL,
+			Title:         title,
+			Label:         label,
+			ScopeLabel:    scopeLabel,
+			Summary:       summary,
+			Original:      original,
+			AnnouncedAt:   announced,
+			ConfirmedAt:   asString(record["confirmedAt"]),
+			OccurredOn:    beijingCalendarDate(asString(record["occurredOn"])),
+			Schedule:      schedule,
+			ScheduleDates: scheduleDates,
+			Estimate:      estimate,
+			Estimated:     estimated,
+			OriginalURL:   originalURL,
+			FeedURL:       feedURL,
 		})
 	}
 	return events, asString(payload["checkedAt"]), true
+}
+
+var shanghai = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+// beijingCalendarDate accepts only a verified YYYY-MM-DD day. A timestamp is
+// not converted, so a confirmation post or a crawl time cannot become a reset day.
+func beijingCalendarDate(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if len(raw) != 10 {
+		return ""
+	}
+	parsed, err := time.ParseInLocation("2006-01-02", raw, shanghai)
+	if err != nil || parsed.Format("2006-01-02") != raw {
+		return ""
+	}
+	return raw
+}
+
+// announcementScheduleDates lists Beijing days covered by the announcement's
+// own stated window. A model estimate is not passed here. A span wider than a
+// week is left unmarked instead of being painted as a cycle.
+func announcementScheduleDates(fromRaw, throughRaw string) []string {
+	from, fromErr := time.Parse(time.RFC3339, strings.TrimSpace(fromRaw))
+	through, throughErr := time.Parse(time.RFC3339, strings.TrimSpace(throughRaw))
+	if fromErr != nil && throughErr != nil {
+		return nil
+	}
+	if fromErr != nil {
+		from = through
+	}
+	if throughErr != nil {
+		through = from
+	}
+	if through.Before(from) {
+		from, through = through, from
+	}
+	start := from.In(shanghai)
+	end := through.In(shanghai)
+	start = time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, shanghai)
+	end = time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, shanghai)
+	days := make([]string, 0, 4)
+	for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
+		days = append(days, day.Format("2006-01-02"))
+		if len(days) > 7 {
+			return nil
+		}
+	}
+	return days
 }
 
 func firstPost(raw any) (summary string, original string, published string, link string) {

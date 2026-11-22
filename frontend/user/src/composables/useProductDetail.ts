@@ -35,7 +35,7 @@ export function useProductDetail(options: { onLoaded?: () => void } = {}) {
 
   const { getLocalizedText, siteCurrency, formatPrice } = useLocalized()
   const {
-    getPurchaseTypeLabel, getFulfillmentTypeLabel, getStockBadgeVariant, getStockStatusLabel,
+    getPurchaseTypeLabel, getFulfillmentTypeLabel, showsAutomaticDelivery, getStockBadgeVariant, getStockStatusLabel,
     hasPromotionPrice, getPromotionPriceAmount, getPromotionSaveAmount,
     hasSkuPromotionPrice, getSkuPromotionPriceAmount, getSkuPromotionSaveAmount,
     hasPromotionRules, getPromotionRules, hasWholesalePrices, getWholesalePrices,
@@ -402,6 +402,7 @@ export function useProductDetail(options: { onLoaded?: () => void } = {}) {
     maxPurchaseQuantity: normalizeOptionalLimitNumber(product.value.max_purchase_quantity) ?? undefined,
     purchaseType: product.value.purchase_type,
     fulfillmentType: product.value.fulfillment_type,
+    couponSale: product.value.coupon_sale === true,
     manualFormSchema: product.value.manual_form_schema || {},
     paymentChannelIds: Array.isArray(product.value.payment_channel_ids) && product.value.payment_channel_ids.length > 0 ? product.value.payment_channel_ids : undefined,
     quantity: quantity.value,
@@ -668,7 +669,7 @@ export function useProductDetail(options: { onLoaded?: () => void } = {}) {
   return {
     // 国际化/格式化（模板需要）
     getLocalizedText, siteCurrency, formatPrice,
-    getPurchaseTypeLabel, getFulfillmentTypeLabel, getStockBadgeVariant, getStockStatusLabel,
+    getPurchaseTypeLabel, getFulfillmentTypeLabel, showsAutomaticDelivery, getStockBadgeVariant, getStockStatusLabel,
     hasPromotionPrice, getPromotionPriceAmount, getPromotionSaveAmount,
     hasSkuPromotionPrice, getSkuPromotionPriceAmount, getSkuPromotionSaveAmount,
     hasPromotionRules, getPromotionRules, hasWholesalePrices, getWholesalePrices,

@@ -27,8 +27,8 @@
         <p v-if="description" class="mt-0.5 truncate text-[13px] text-muted-foreground max-md:hidden">{{ description }}</p>
         <p class="mt-1 flex items-center gap-1.5 truncate text-xs text-muted-foreground empty:hidden">
           <span class="inline-flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap md:hidden">
-            <Zap v-if="product.fulfillment_type === 'auto'" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
-            {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
+            <Zap v-if="showsAutomaticDelivery(product)" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
+            {{ getFulfillmentTypeLabel(product) }}
           </span>
           <span class="shrink-0 md:hidden" :class="stock.text">{{ getStockStatusLabel(product) }}</span>
           <span v-for="(tag, tagIndex) in (product.tags ?? []).slice(0, maxTags)" :key="tagIndex" class="truncate rounded bg-card px-1.5 leading-5 max-md:hidden">
@@ -42,8 +42,8 @@
       <span
         class="inline-flex h-6 items-center gap-1 rounded-full bg-card px-2.5 text-xs font-medium text-foreground"
       >
-        <Zap v-if="product.fulfillment_type === 'auto'" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
-        {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
+        <Zap v-if="showsAutomaticDelivery(product)" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
+        {{ getFulfillmentTypeLabel(product) }}
       </span>
     </span>
 
@@ -122,8 +122,8 @@
       </p>
       <div class="mt-1 flex flex-wrap items-center justify-between gap-x-2 text-xs text-muted-foreground">
         <span class="inline-flex min-w-0 items-center gap-1">
-          <Zap v-if="product.fulfillment_type === 'auto'" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
-          <span class="shrink-0">{{ getFulfillmentTypeLabel(product.fulfillment_type) }}</span>
+          <Zap v-if="showsAutomaticDelivery(product)" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
+          <span class="shrink-0">{{ getFulfillmentTypeLabel(product) }}</span>
           <span v-for="(tag, tagIndex) in (product.tags ?? []).slice(0, maxTags)" :key="tagIndex"
             class="min-w-0 truncate rounded bg-secondary px-1.5 leading-5">
             {{ tag }}
@@ -192,7 +192,7 @@ defineEmits<{
 
 const { t } = useI18n()
 const { getLocalizedText, siteCurrency, formatPrice } = useLocalized()
-const { getFulfillmentTypeLabel, getStockStatusLabel, isSoldOut, hasPromotionPrice, getPromotionPriceAmount, hasPromotionRules, hasWholesalePrices, getCardExclusivePrice } = useProductLabels()
+const { getFulfillmentTypeLabel, showsAutomaticDelivery, getStockStatusLabel, isSoldOut, hasPromotionPrice, getPromotionPriceAmount, hasPromotionRules, hasWholesalePrices, getCardExclusivePrice } = useProductLabels()
 const exclusivePrice = computed(() => getCardExclusivePrice(props.product))
 
 const title = computed(() => getLocalizedText(props.product.title))

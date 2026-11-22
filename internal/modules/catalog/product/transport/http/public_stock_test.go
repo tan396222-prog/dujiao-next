@@ -10,6 +10,27 @@ import (
 	"github.com/dujiao-next/internal/constants"
 )
 
+func TestCouponSalePublicViewKeepsManualInventoryType(t *testing.T) {
+	view := publicProductView{Product: productdomain.Product{
+		ID:               45,
+		Slug:             "coupon-10off-3",
+		FulfillmentType:  constants.FulfillmentTypeManual,
+		CouponSale:       true,
+		ManualStockTotal: constants.ManualStockUnlimited,
+	}}
+	resp := view.toProductResp()
+	if resp.FulfillmentType != constants.FulfillmentTypeManual || !resp.CouponSale {
+		t.Fatalf("public view = type %s coupon_sale %v", resp.FulfillmentType, resp.CouponSale)
+	}
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"fulfillment_type":"auto"`) {
+		t.Fatalf("coupon sale was published as card-secret auto: %s", raw)
+	}
+}
+
 func TestDecorateProductStock_AutoSkipsInactiveSKUs(t *testing.T) {
 	h := &PublicHandler{}
 	product := &productdomain.Product{

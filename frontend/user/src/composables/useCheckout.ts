@@ -382,7 +382,8 @@ export function useCheckout() {
   const manualFormProducts = computed<ManualFormProduct[]>(() => {
     const grouped = new Map<number, ManualFormProduct>()
     cartItems.value.forEach((item) => {
-      // 按 schema 而非交付类型判断：对接商品对外展示为 auto 时也可能需要交付资料
+      // 售券在付款后生成券码，不收集人工交付资料。对接商品仍按 schema 判断。
+      if (item.couponSale || item.fulfillmentType === 'coupon') return
       const fields = normalizeManualFormSchema(item.manualFormSchema)
       if (fields.length === 0) {
         return

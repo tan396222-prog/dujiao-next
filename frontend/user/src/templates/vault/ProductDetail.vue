@@ -48,8 +48,8 @@
           <div class="mb-1.5 flex flex-wrap gap-2">
             <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold" :class="stockPillTone">{{ getStockStatusLabel(product) }}</span>
             <span class="inline-flex items-center gap-1.5 rounded-full bg-[color:var(--teal-soft)] px-2.5 py-1 text-[12.5px] font-semibold text-[color:var(--teal-strong)]">
-              <component :is="product.fulfillment_type === 'auto' ? Zap : Pencil" class="h-3.5 w-3.5" />
-              {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
+              <component :is="showsAutomaticDelivery(product) ? Zap : Pencil" class="h-3.5 w-3.5" />
+              {{ getFulfillmentTypeLabel(product) }}
             </span>
             <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12.5px] font-semibold" :class="product.purchase_type === 'guest' ? 'bg-[color:var(--gold-soft)] text-[color:var(--gold-strong)]' : 'bg-[color:var(--teal-soft)] text-[color:var(--teal-strong)]'">
               <component :is="product.purchase_type === 'guest' ? UserPlus : Lock" class="h-3.5 w-3.5" />
@@ -180,8 +180,8 @@
           </div>
 
           <div class="mt-4 flex items-center gap-3 rounded-md bg-[color:var(--teal-soft)] px-[18px] py-3.5 text-[color:var(--teal-strong)]">
-            <component :is="product.fulfillment_type === 'manual' ? Pencil : TicketCheck" class="h-[22px] w-[22px] flex-none" />
-            <span class="text-sm font-semibold">{{ product.fulfillment_type === 'manual' ? t('productDetail.deliveryReassuranceManual') : t('productDetail.deliveryReassurance') }}</span>
+            <component :is="showsAutomaticDelivery(product) ? TicketCheck : Pencil" class="h-[22px] w-[22px] flex-none" />
+            <span class="text-sm font-semibold">{{ showsAutomaticDelivery(product) ? t('productDetail.deliveryReassurance') : t('productDetail.deliveryReassuranceManual') }}</span>
           </div>
         </div>
       </section>
@@ -280,7 +280,7 @@ const setupMobileBarObserver = () => {
 
 const {
   getLocalizedText, siteCurrency, formatPrice,
-  getFulfillmentTypeLabel, getPurchaseTypeLabel, getStockStatusLabel, getStockBadgeVariant,
+  getFulfillmentTypeLabel, showsAutomaticDelivery, getPurchaseTypeLabel, getStockStatusLabel, getStockBadgeVariant,
   hasPromotionPrice, getPromotionPriceAmount, getPromotionSaveAmount,
   hasSkuPromotionPrice, getSkuPromotionSaveAmount,
   hasPromotionRules, getPromotionRules,

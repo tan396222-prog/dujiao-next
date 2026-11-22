@@ -22,7 +22,7 @@
         </div>
         <!-- Me -->
         <User v-else-if="item.icon === 'me'" class="w-5 h-5" />
-        <span>{{ t(item.label) }}</span>
+        <span :class="item.icon === 'invite' ? 'nav-rebate-label' : ''">{{ t(item.label) }}</span>
       </router-link>
     </div>
   </nav>

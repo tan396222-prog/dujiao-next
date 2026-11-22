@@ -135,6 +135,8 @@ const (
 	WalletTxnTypeAffiliateCommissionReversal = "affiliate_commission_reversal"
 	// WalletTxnTypeOrderUnderpaidCredit 记录"支付成功但金额不足以履约订单"时转入用户余额的款项。
 	WalletTxnTypeOrderUnderpaidCredit = "order_underpaid_credit"
+	// WalletTxnTypeDailyCheckIn 记录每日签到奖励转入可购物余额。不参与推广佣金，也不抵扣未追回佣金。
+	WalletTxnTypeDailyCheckIn = "daily_checkin"
 )
 
 // 钱包交易方向常量

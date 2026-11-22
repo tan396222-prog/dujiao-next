@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { useAppStore } from '../stores/app'
 import { amountToCents, centsToAmount } from '../utils/money'
 import { allowsBackorder, resolveStockTier, stockTierMessageKey } from '../utils/publicStock'
+import { showsAutomaticDelivery } from '../utils/fulfillment'
 import { resolveCardDisplayPrice, resolveMemberPriceAmount } from '../utils/productPricing'
 import { useUserAuthStore } from '../stores/userAuth'
 import { useUserProfileStore } from '../stores/userProfile'
@@ -52,8 +53,8 @@ export function useProductLabels() {
     return purchaseType === 'guest' ? t('productPurchase.guest') : t('productPurchase.member')
   }
 
-  const getFulfillmentTypeLabel = (fulfillmentType: string) => {
-    return fulfillmentType === 'auto' ? t('products.fulfillmentType.auto') : t('products.fulfillmentType.manual')
+  const getFulfillmentTypeLabel = (source: unknown) => {
+    return showsAutomaticDelivery(source as any) ? t('products.fulfillmentType.auto') : t('products.fulfillmentType.manual')
   }
 
   const getStockBadgeVariant = (status: string): 'info' | 'warning' | 'destructive' | 'success' => {
@@ -191,6 +192,7 @@ export function useProductLabels() {
     getCardExclusivePrice,
     getPurchaseTypeLabel,
     getFulfillmentTypeLabel,
+    showsAutomaticDelivery,
     getStockBadgeVariant,
     getStockStatusLabel,
     isSoldOut,

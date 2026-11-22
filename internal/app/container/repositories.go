@@ -12,6 +12,7 @@ import (
 	mappinggormstore "github.com/dujiao-next/internal/modules/catalog/mapping/infrastructure/gormstore"
 	productgormstore "github.com/dujiao-next/internal/modules/catalog/product/store/gormstore"
 	channelclientstore "github.com/dujiao-next/internal/modules/channelclient/infrastructure/gormstore"
+	checkingormstore "github.com/dujiao-next/internal/modules/checkin/infrastructure/gormstore"
 	coupongormstore "github.com/dujiao-next/internal/modules/coupon/infrastructure/gormstore"
 	dashboardgormstore "github.com/dujiao-next/internal/modules/dashboard/infrastructure/gormstore"
 	downstreamcallbackgormstore "github.com/dujiao-next/internal/modules/downstreamcallback/infrastructure/gormstore"
@@ -54,6 +55,7 @@ func (c *Container) initRepositories() error {
 	c.CardSecretRepo = cardsecretgormstore.New(db)
 	c.CardSecretBatchRepo = cardsecretgormstore.NewBatch(db)
 	c.GiftCardRepo = giftcardgormstore.New(db)
+	c.CheckInRepo = checkingormstore.New(db)
 	c.FulfillmentStore = fulfillmentgormstore.New(db)
 	c.ProductRepo = productgormstore.NewProductStore(db)
 	c.ProductSKURepo = productgormstore.NewSKUStore(db)

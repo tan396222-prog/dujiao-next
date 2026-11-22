@@ -55,10 +55,10 @@
                 <Lock v-else class="h-3 w-3" />
                 {{ getPurchaseTypeLabel(product.purchase_type) }}
               </Badge>
-              <Badge :variant="product.fulfillment_type === 'auto' ? 'info' : 'neutral'">
-                <Zap v-if="product.fulfillment_type === 'auto'" class="h-3 w-3" />
+              <Badge :variant="showsAutomaticDelivery(product) ? 'info' : 'neutral'">
+                <Zap v-if="showsAutomaticDelivery(product)" class="h-3 w-3" />
                 <Pencil v-else class="h-3 w-3" />
-                {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
+                {{ getFulfillmentTypeLabel(product) }}
               </Badge>
               <Badge :variant="getStockBadgeVariant(product.stock_status)">
                 {{ getStockStatusLabel(product) }}
@@ -313,7 +313,7 @@ const setupMobileBarObserver = () => {
 // 全部业务逻辑由 useProductDetail 提供（与 vault 模板共用，保证功能一致）
 const {
   getLocalizedText, siteCurrency, formatPrice,
-  getPurchaseTypeLabel, getFulfillmentTypeLabel, getStockBadgeVariant, getStockStatusLabel,
+  getPurchaseTypeLabel, getFulfillmentTypeLabel, showsAutomaticDelivery, getStockBadgeVariant, getStockStatusLabel,
   hasPromotionPrice, getPromotionPriceAmount, getPromotionSaveAmount,
   hasSkuPromotionPrice, getSkuPromotionSaveAmount,
   hasPromotionRules, getPromotionRules,

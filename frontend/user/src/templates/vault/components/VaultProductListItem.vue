@@ -27,8 +27,8 @@
           {{ stockPill.label }}
         </span>
         <span class="inline-flex items-center gap-1 rounded-full bg-[color:var(--teal-soft)] px-2 py-0.5 text-[11px] font-semibold text-[color:var(--teal-strong)]">
-          <component :is="product.fulfillment_type === 'auto' ? Zap : Pencil" class="h-3 w-3" />
-          {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
+          <component :is="showsAutomaticDelivery(product) ? Zap : Pencil" class="h-3 w-3" />
+          {{ getFulfillmentTypeLabel(product) }}
         </span>
         <span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="product.purchase_type === 'guest' ? 'bg-[color:var(--gold-soft)] text-[color:var(--gold-strong)]' : 'bg-[color:var(--teal-soft)] text-[color:var(--teal-strong)]'">
           <component :is="product.purchase_type === 'guest' ? UserPlus : Lock" class="h-3 w-3" />
@@ -82,7 +82,7 @@ defineEmits<{ quickBuy: [product: any] }>()
 const { t } = useI18n()
 const { getLocalizedText, siteCurrency, formatPrice } = useLocalized()
 const {
-  getStockStatusLabel, getPurchaseTypeLabel, getFulfillmentTypeLabel,
+  getStockStatusLabel, getPurchaseTypeLabel, getFulfillmentTypeLabel, showsAutomaticDelivery,
   isSoldOut, hasPromotionPrice, getPromotionPriceAmount, hasWholesalePrices, hasPromotionRules, getCardExclusivePrice,
 } = useProductLabels()
 

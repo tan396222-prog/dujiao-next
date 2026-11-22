@@ -266,7 +266,12 @@
   "announcement": {
     "close": "關閉",
     "dismissToday": "今日不再提示",
-    "dismissForever": "不再提示"
+    "dismissForever": "不再提示",
+    "wechatLabel": "微信號",
+    "wechatHint": "可複製微信號，或長按二維碼添加。",
+    "wechatCopy": "複製微信號",
+    "wechatCopied": "微信號已複製",
+    "wechatQrAlt": "微信二維碼"
   },
   "about": {
     "title": "關於我們",
@@ -295,7 +300,7 @@
   "bottomNav": {
     "home": "首頁",
     "products": "商品",
-    "invite": "邀請",
+    "invite": "返錢",
     "feed": "資訊",
     "cart": "購物車",
     "me": "我的"
@@ -587,7 +592,8 @@
         "affiliate_commission_reversal": "推廣佣金沖回",
         "admin_adjust": "管理員調帳",
         "admin_refund": "管理員退款",
-        "order_underpaid_credit": "訂單收款不足轉入"
+        "order_underpaid_credit": "訂單收款不足轉入",
+        "daily_checkin": "每日簽到"
       },
       "errors": {
         "loadFailed": "錢包資料載入失敗，請稍後重試",
@@ -599,9 +605,26 @@
         "rechargeStateFailed": "儲值支付未成功，請更換渠道後重試"
       }
     },
+    "checkin": {
+      "title": "每日簽到",
+      "subtitle": "每個北京時間自然日可簽到一次，隨機獲得 0.10 到 0.80 元，進入購物餘額。餘額僅用於站內購物，不支持提現。",
+      "claim": "簽到",
+      "claiming": "簽到中",
+      "claimed": "今日已簽到",
+      "reward": "本次獎勵",
+      "balance": "當前購物餘額",
+      "tomorrow": "北京時間 {date} 零點後可以再次簽到",
+      "debtNote": "獎勵全額進入購物餘額，不抵扣未追回推廣佣金，也不改變 3% 返傭規則。",
+      "debtOffset": "本次有 {amount} 元用於抵扣未追回推廣佣金。",
+      "errors": {
+        "loadFailed": "簽到狀態載入失敗，請稍後重試",
+        "claimFailed": "簽到失敗，請稍後重試"
+      }
+    },
     "affiliate": {
       "title": "推廣返利",
-      "subtitle": "開通後獲得專屬邀請連結。確認後的佣金進入可購物餘額，可直接餘額支付。",
+      "subtitle": "開通後獲得專屬邀請連結。確認後的佣金進入可購物餘額，可直接餘額支付。餘額僅用於站內購物，不支持提現。",
+      "balanceShopOnly": "返傭和簽到進入購物餘額，僅用於站內購物，不支持提現。",
       "notOpened": "你尚未開通推廣返利，開通後可獲得專屬聯盟ID與推廣連結。",
       "openButton": "立即開通",
       "opening": "開通中...",
@@ -612,8 +635,8 @@
       "conversionRate": "轉化率",
       "conversionDetail": "點擊 {clicks} · 有效訂單 {orders}",
       "pendingCommission": "待確認佣金",
-      "availableCommission": "可提現佣金",
-      "withdrawnCommission": "累計提現佣金",
+      "availableCommission": "可購物佣金",
+      "withdrawnCommission": "歷史已提現佣金",
       "withdrawTitle": "申請提現",
       "withdrawSubtitle": "填寫金額、提現渠道與帳號後提交審核",
       "withdrawAmountLabel": "提現金額",
@@ -1734,7 +1757,7 @@
     "fulfillmentTypes": {
       "manual": "人工交付",
       "auto": "自動交付",
-      "coupon": "優惠碼"
+      "coupon": "自動交付"
     },
     "fulfillmentStatuses": {
       "pending": "待交付",
@@ -1811,7 +1834,26 @@
     "newsTitle": "新聞",
     "hotTitle": "熱門話題",
     "resetsTitle": "重置公告",
-    "resetsHint": "只展示已經發布的公告。標註預計的時間不是精確承諾。",
+    "resetsHint": "只標出公告裡已經核對的重置日。預計來自公告自己寫明的時間，不是承諾，也不按週期往後推。",
+    "noResetDate": "暫無",
+    "noDateThisMonth": "這個月還沒有可標出的重置日",
+    "confirmedMark": "已確認",
+    "estimatedMark": "預計",
+    "estimatedNote": "預計不是精確承諾",
+    "today": "今天",
+    "previousMonth": "上個月",
+    "nextMonth": "下個月",
+    "dayConfirmed": "{date}，已確認的重置日",
+    "dayEstimated": "{date}，預計，不是承諾",
+    "weekday": {
+      "mon": "一",
+      "tue": "二",
+      "wed": "三",
+      "thu": "四",
+      "fri": "五",
+      "sat": "六",
+      "sun": "日"
+    },
     "noDaily": "目前沒有每日摘要",
     "noNews": "目前沒有新聞",
     "noHot": "目前沒有熱門話題",

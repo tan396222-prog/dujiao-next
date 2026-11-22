@@ -745,3 +745,21 @@ html[data-wallpaper="1"] :is(#app, .vault-scope) {
   background-color: transparent !important;
   background-image: none !important;
 }
+
+/* 公告内容面板要压过水晶弹窗的半透明玻璃，浅色和深色都保持纯白。 */
+html[data-skin="crystal"] [data-announcement-sheet],
+html.dark[data-skin="crystal"] [data-announcement-sheet] {
+  background-color: #ffffff !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  color: #111111 !important;
+  opacity: 1 !important;
+}
+
+html[data-skin="crystal"] [data-announcement-sheet] :is(.announcement-copy, .announcement-copy *, .wechat-contact, .wechat-contact *),
+html.dark[data-skin="crystal"] [data-announcement-sheet] :is(.announcement-copy, .announcement-copy *, .wechat-contact, .wechat-contact *) {
+  color: #111111 !important;
+  font-weight: 700;
+  opacity: 1;
+}

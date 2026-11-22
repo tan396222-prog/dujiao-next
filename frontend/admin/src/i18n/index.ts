@@ -2621,6 +2621,7 @@ const messages = {
             admin_adjust: '管理员调账',
             admin_refund: '管理员退款',
             order_underpaid_credit: '订单收款不足转入',
+            daily_checkin: '每日签到',
           },
           errors: {
             loadFailed: '钱包数据获取失败',
@@ -7374,6 +7375,7 @@ const messages = {
             admin_adjust: '管理員調帳',
             admin_refund: '管理員退款',
             order_underpaid_credit: '訂單收款不足轉入',
+            daily_checkin: '每日簽到',
           },
           errors: {
             loadFailed: '錢包資料取得失敗',
@@ -12127,6 +12129,7 @@ const messages = {
             admin_adjust: 'Admin adjustment',
             admin_refund: 'Admin refund',
             order_underpaid_credit: 'Underpaid order credit',
+            daily_checkin: 'Daily check-in',
           },
           errors: {
             loadFailed: 'Failed to load wallet data',

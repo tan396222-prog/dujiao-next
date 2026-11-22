@@ -20,6 +20,7 @@ import (
 	mappingdomain "github.com/dujiao-next/internal/modules/catalog/mapping/domain"
 	productdomain "github.com/dujiao-next/internal/modules/catalog/product/domain"
 	channelclientdomain "github.com/dujiao-next/internal/modules/channelclient/domain"
+	checkindomain "github.com/dujiao-next/internal/modules/checkin/domain"
 	contentdomain "github.com/dujiao-next/internal/modules/content/domain"
 	coupondomain "github.com/dujiao-next/internal/modules/coupon/domain"
 	downstreamcallbackdomain "github.com/dujiao-next/internal/modules/downstreamcallback/domain"
@@ -63,6 +64,8 @@ func AutoMigrate() error {
 		&walletdomain.Account{},
 		&walletdomain.Transaction{},
 		&walletdomain.RechargeOrder{},
+		// daily_checkins 只增加签到记录。回滚代码时保留 wallet_transactions 中 daily-checkin: 流水，避免同一天再次入账。
+		&checkindomain.CheckIn{},
 		&auditlogdomain.UserLoginLog{},
 		&auditlogdomain.AuthzAuditLog{},
 		&notificationdomain.NotificationLog{},

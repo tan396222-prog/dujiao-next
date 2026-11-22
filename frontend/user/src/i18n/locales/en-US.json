@@ -266,7 +266,12 @@
   "announcement": {
     "close": "Close",
     "dismissToday": "Don't show today",
-    "dismissForever": "Don't show again"
+    "dismissForever": "Don't show again",
+    "wechatLabel": "WeChat ID",
+    "wechatHint": "Copy the ID, or long-press the QR code to add it.",
+    "wechatCopy": "Copy WeChat ID",
+    "wechatCopied": "WeChat ID copied",
+    "wechatQrAlt": "WeChat QR code"
   },
   "about": {
     "title": "About Us",
@@ -295,7 +300,7 @@
   "bottomNav": {
     "home": "Home",
     "products": "Products",
-    "invite": "Invite",
+    "invite": "返钱",
     "feed": "News",
     "cart": "Cart",
     "me": "Me"
@@ -587,7 +592,8 @@
         "affiliate_commission_reversal": "Affiliate commission reversal",
         "admin_adjust": "Admin adjustment",
         "admin_refund": "Admin refund",
-        "order_underpaid_credit": "Underpaid order credit"
+        "order_underpaid_credit": "Underpaid order credit",
+        "daily_checkin": "Daily check-in"
       },
       "errors": {
         "loadFailed": "Failed to load wallet data, please try again later",
@@ -599,9 +605,26 @@
         "rechargeStateFailed": "Recharge payment was not successful, please try again with another channel"
       }
     },
+    "checkin": {
+      "title": "Daily check-in",
+      "subtitle": "Check in once each Beijing calendar day for a random 0.10 to 0.80 CNY shopping-balance reward. The balance can only be used for in-store purchases and cannot be withdrawn.",
+      "claim": "Check in",
+      "claiming": "Checking in",
+      "claimed": "Checked in today",
+      "reward": "Today's reward",
+      "balance": "Shopping balance",
+      "tomorrow": "You can check in again after Beijing midnight on {date}",
+      "debtNote": "The full reward enters the shopping balance. It does not offset unrecovered affiliate commission and does not change the 3% rule.",
+      "debtOffset": "{amount} of this reward offset unrecovered affiliate commission.",
+      "errors": {
+        "loadFailed": "Couldn't load check-in status. Please try again.",
+        "claimFailed": "Check-in failed. Please try again."
+      }
+    },
     "affiliate": {
       "title": "Affiliate Center",
-      "subtitle": "Open it to get your invite link. Confirmed commission is added to your shoppable balance.",
+      "subtitle": "Open it to get your invite link. Confirmed commission is added to your shoppable balance and cannot be withdrawn.",
+      "balanceShopOnly": "Commission and check-in rewards stay in the shopping balance. They can only be used for in-store purchases and cannot be withdrawn.",
       "notOpened": "Affiliate is not enabled for your account yet. Open it to get your unique affiliate ID and promotion URL.",
       "openButton": "Open Affiliate",
       "opening": "Opening...",
@@ -612,7 +635,7 @@
       "conversionRate": "Conversion Rate",
       "conversionDetail": "Clicks {clicks} · Valid Orders {orders}",
       "pendingCommission": "Pending Commission",
-      "availableCommission": "Available Commission",
+      "availableCommission": "Spendable commission",
       "withdrawnCommission": "Total Withdrawn",
       "withdrawTitle": "Apply Withdraw",
       "withdrawSubtitle": "Fill amount, channel and account to submit for review",
@@ -1734,7 +1757,7 @@
     "fulfillmentTypes": {
       "manual": "Manual",
       "auto": "Auto",
-      "coupon": "Coupon code"
+      "coupon": "Auto"
     },
     "fulfillmentStatuses": {
       "pending": "Pending",
@@ -1811,7 +1834,26 @@
     "newsTitle": "News",
     "hotTitle": "Hot topics",
     "resetsTitle": "Reset notices",
-    "resetsHint": "Only published notices are shown. A time marked as an estimate is not a promise.",
+    "resetsHint": "Only a reset day checked in a published notice is marked. An estimate comes from the notice's own wording, is not a promise, and is not extended into a cycle.",
+    "noResetDate": "None yet",
+    "noDateThisMonth": "No reset day to mark this month",
+    "confirmedMark": "Confirmed",
+    "estimatedMark": "Estimate",
+    "estimatedNote": "An estimate is not a promise",
+    "today": "Today",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "dayConfirmed": "{date}, confirmed reset day",
+    "dayEstimated": "{date}, estimate, not a promise",
+    "weekday": {
+      "mon": "Mo",
+      "tue": "Tu",
+      "wed": "We",
+      "thu": "Th",
+      "fri": "Fr",
+      "sat": "Sa",
+      "sun": "Su"
+    },
     "noDaily": "No daily summary right now",
     "noNews": "No news right now",
     "noHot": "No hot topics right now",

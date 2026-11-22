@@ -33,6 +33,12 @@
             </a>
           </Button>
         </template>
+        <Button as-child variant="ghost" size="sm" class="gap-1.5 whitespace-nowrap shrink-0">
+          <router-link to="/me/affiliate">
+            <UserPlus class="w-4 h-4 shrink-0 opacity-70" />
+            <span class="nav-rebate-label">{{ t('bottomNav.invite') }}</span>
+          </router-link>
+        </Button>
       </div>
 
       <!-- Right Side Actions -->
@@ -214,7 +220,7 @@ import { getImageUrl } from '../utils/image'
 import { useNavConfig } from '../composables/useNavConfig'
 import {
   Sun, Moon, ShoppingCart, ClipboardList, LogIn, User, LogOut, Languages,
-  EllipsisVertical, X,
+  EllipsisVertical, X, UserPlus,
 } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
