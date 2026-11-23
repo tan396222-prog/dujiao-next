@@ -510,6 +510,45 @@ func isLayer(path, layer string) bool {
 	return false
 }
 
+func TestPaymentFulfillmentAndJobsDoNotImportOrderRisk(t *testing.T) {
+	root := findRepositoryRoot(t)
+	roots := []string{
+		"internal/modules/payment",
+		"internal/modules/fulfillment",
+		"internal/app/jobs",
+	}
+	for _, relative := range roots {
+		err := filepath.WalkDir(filepath.Join(root, relative), func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || !strings.HasSuffix(path, ".go") {
+				return nil
+			}
+			parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
+			if err != nil {
+				return err
+			}
+			for _, imported := range parsed.Imports {
+				importPath, err := strconv.Unquote(imported.Path.Value)
+				if err != nil {
+					return err
+				}
+				if strings.Contains(importPath, "/internal/modules/orderrisk") {
+					t.Errorf("%s imports order risk; payment callbacks, fulfillment, and workers must not use the order IP ban", path)
+				}
+				if strings.Contains(importPath, "/internal/modules/aifeed") {
+					t.Errorf("%s imports the public feed; news must stay off the payment path", path)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func importsAnyLayer(importPath string, layers ...string) bool {
 	parts := strings.Split(strings.Trim(importPath, "/"), "/")
 	for _, part := range parts {

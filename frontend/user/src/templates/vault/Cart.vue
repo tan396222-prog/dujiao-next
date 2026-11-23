@@ -38,7 +38,7 @@
                 <p v-if="itemStockHint(item)" class="mt-1 text-[13px] text-muted-foreground">{{ itemStockHint(item) }}</p>
                 <div class="mt-2 flex flex-wrap gap-1.5">
                   <Badge :variant="item.purchaseType === 'guest' ? 'warning' : 'info'" size="sm" class="rounded-full">{{ item.purchaseType === 'guest' ? t('productPurchase.guest') : t('productPurchase.member') }}</Badge>
-                  <Badge variant="success" size="sm" class="rounded-full">{{ item.fulfillmentType === 'auto' ? t('products.fulfillmentType.auto') : t('products.fulfillmentType.manual') }}</Badge>
+                  <Badge variant="success" size="sm" class="rounded-full">{{ showsAutomaticDelivery(item) ? t('products.fulfillmentType.auto') : t('products.fulfillmentType.manual') }}</Badge>
                 </div>
               </div>
               <button type="button" class="inline-flex h-10 flex-none items-center gap-1.5 rounded-full border-2 border-hairline-strong px-3 text-muted-foreground transition-colors hover:border-destructive hover:bg-destructive/10 hover:text-destructive" @click="removeWithUndo(item)">
@@ -55,7 +55,7 @@
                   class="h-10 w-[46px] border-x bg-card text-center font-bold tabular-nums outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   :value="item.quantity"
                   :min="itemPurchaseMin(item)"
-                  :max="itemMaxQuantity(item)"
+                  :max="itemPurchaseLimit(item) || undefined"
                   @change="handleQtyChange(item, $event)"
                 />
                 <button type="button" class="grid h-10 w-[38px] place-items-center bg-card text-foreground disabled:opacity-35" :aria-label="t('cart.remove')" :disabled="item.quantity >= itemMaxQuantity(item)" @click="updateQty(item, item.quantity + 1)"><Plus class="h-4 w-4" /></button>
@@ -99,6 +99,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import VaultCheckoutSteps from './components/VaultCheckoutSteps.vue'
 import { useCart } from '../../composables/useCart'
+import { showsAutomaticDelivery } from '../../utils/fulfillment'
 
 const { t } = useI18n()
 
@@ -106,7 +107,7 @@ const {
   getLocalizedText, formatPrice, totalCurrency,
   cartItems, totalItems, totalAmount,
   cartItemKey, cartItemImage, itemSkuDisplay, itemSubtotal, itemStockHint, quantityWarning,
-  itemPurchaseMin, itemMaxQuantity,
+  itemPurchaseMin, itemPurchaseLimit, itemMaxQuantity,
   removeWithUndo, updateQty, handleQtyChange,
 } = useCart()
 </script>

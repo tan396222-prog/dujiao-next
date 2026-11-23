@@ -46,6 +46,10 @@ export function useLogin() {
   const password = ref('')
   const showPassword = ref(false)
   const rememberMe = ref(true)
+  const loginMode = ref<'password' | 'email_code'>('password')
+  const emailCode = ref('')
+  const emailCodeCountdown = ref(0)
+  let emailCodeTimer: ReturnType<typeof setInterval> | null = null
 
   const resumeGoogleRedirect2FAOnMount = shouldResumeGoogleRedirect2FA(
     route.query.google2fa,
@@ -154,23 +158,101 @@ export function useLogin() {
     openTelegramCompatibleLink(telegramMiniAppEntryLink.value)
   }
 
-  const performLogin = async () => {
-    error.value = ''
-    if (!formValidation.validateAll({ email: email.value, password: password.value })) return
-
+  const captchaReady = () => {
     if (loginCaptchaEnabled.value && captchaProvider.value === 'image') {
       if (!captchaPayload.value.captcha_id || !captchaPayload.value.captcha_code) {
         error.value = t('auth.common.captchaRequired')
-        return
+        return false
       }
     }
-
     if (loginCaptchaEnabled.value && captchaProvider.value === 'turnstile') {
       if (!turnstileToken.value) {
         error.value = t('auth.common.captchaRequired')
-        return
+        return false
       }
     }
+    return true
+  }
+
+  const refreshLoginCaptcha = () => {
+    if (captchaProvider.value === 'image') {
+      imageCaptchaRef.value?.refresh()
+    }
+    if (captchaProvider.value === 'turnstile') {
+      turnstileRef.value?.reset()
+      turnstileToken.value = ''
+    }
+  }
+
+  const stopEmailCodeCountdown = () => {
+    if (emailCodeTimer) {
+      clearInterval(emailCodeTimer)
+      emailCodeTimer = null
+    }
+  }
+
+  const startEmailCodeCountdown = () => {
+    stopEmailCodeCountdown()
+    emailCodeCountdown.value = 60
+    emailCodeTimer = setInterval(() => {
+      emailCodeCountdown.value -= 1
+      if (emailCodeCountdown.value <= 0) {
+        emailCodeCountdown.value = 0
+        stopEmailCodeCountdown()
+      }
+    }, 1000)
+  }
+
+  const emailReady = () => {
+    formValidation.touchField('email', email.value)
+    return !formValidation.hasError('email')
+  }
+
+  const sendLoginEmailCode = async () => {
+    error.value = ''
+    info.value = ''
+    if (!emailReady() || !captchaReady() || emailCodeCountdown.value > 0) return
+    try {
+      await userAuthAPI.sendLoginEmailCode({
+        email: email.value,
+        captcha_payload: getCaptchaPayload(),
+      })
+      info.value = t('auth.login.emailCodeSent')
+      startEmailCodeCountdown()
+    } catch (err: any) {
+      error.value = err?.message || t('auth.login.error')
+      refreshLoginCaptcha()
+    }
+  }
+
+  const performLogin = async () => {
+    error.value = ''
+    if (loginMode.value === 'email_code') {
+      if (!emailReady() || !captchaReady()) return
+      if (emailCode.value.trim() === '') {
+        error.value = t('auth.login.emailCodeRequired')
+        return
+      }
+      try {
+        const result = await userAuthStore.loginWithEmailCode({
+          email: email.value,
+          code: emailCode.value.trim(),
+          remember_me: rememberMe.value,
+          captcha_payload: getCaptchaPayload(),
+        })
+        if (result && result.requiresTotp) {
+          enter2FAStep()
+          return
+        }
+        await redirectAfterLogin()
+      } catch (err: any) {
+        error.value = err.message || t('auth.login.error')
+        refreshLoginCaptcha()
+      }
+      return
+    }
+    if (!formValidation.validateAll({ email: email.value, password: password.value })) return
+    if (!captchaReady()) return
 
     try {
       const result = await userAuthStore.login({
@@ -186,13 +268,7 @@ export function useLogin() {
       await redirectAfterLogin()
     } catch (err: any) {
       error.value = err.message || t('auth.login.error')
-      if (captchaProvider.value === 'image') {
-        imageCaptchaRef.value?.refresh()
-      }
-      if (captchaProvider.value === 'turnstile') {
-        turnstileRef.value?.reset()
-        turnstileToken.value = ''
-      }
+      refreshLoginCaptcha()
     }
   }
 
@@ -472,6 +548,7 @@ export function useLogin() {
     delete win[telegramCallbackName]
     clearTelegramWidget()
     stopChallengeCountdown()
+    stopEmailCodeCountdown()
   })
 
   return {
@@ -484,6 +561,10 @@ export function useLogin() {
     password,
     showPassword,
     rememberMe,
+    loginMode,
+    emailCode,
+    emailCodeCountdown,
+    sendLoginEmailCode,
     // 2FA
     step,
     totpMode,

@@ -15,10 +15,7 @@
         class="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-xl md:h-16 md:w-16"
         :class="[hasImage ? 'bg-muted' : 'bg-[hsl(var(--h)_62%_94%)] dark:bg-[hsl(var(--h)_32%_17%)]', soldOut && 'grayscale']"
       >
-        <template v-if="hasImage">
-          <img :src="displayImageSrc" alt="" aria-hidden="true" loading="lazy" decoding="async" class="absolute inset-0 h-full w-full scale-150 object-cover opacity-60 blur-lg saturate-150" />
-          <img :src="displayImageSrc" :alt="title" loading="lazy" decoding="async" class="pcard-tile relative h-9 w-9 rounded-lg object-cover md:h-10 md:w-10" @error="handleImageError" />
-        </template>
+        <img v-if="hasImage" :src="displayImageSrc" :alt="title" loading="lazy" decoding="async" class="pcard-cover absolute inset-0 h-full w-full object-cover" @error="handleImageError" />
         <span v-else aria-hidden="true" class="text-xl font-extrabold text-[hsl(var(--h)_55%_38%)] dark:text-[hsl(var(--h)_55%_76%)]">{{ monogram }}</span>
       </div>
       <div class="min-w-0">
@@ -30,8 +27,8 @@
         <p v-if="description" class="mt-0.5 truncate text-[13px] text-muted-foreground max-md:hidden">{{ description }}</p>
         <p class="mt-1 flex items-center gap-1.5 truncate text-xs text-muted-foreground empty:hidden">
           <span class="inline-flex min-w-0 items-center gap-1 overflow-hidden whitespace-nowrap md:hidden">
-            <Zap v-if="product.fulfillment_type === 'auto'" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
-            {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
+            <Zap v-if="showsAutomaticDelivery(product)" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
+            {{ getFulfillmentTypeLabel(product) }}
           </span>
           <span class="shrink-0 md:hidden" :class="stock.text">{{ getStockStatusLabel(product) }}</span>
           <span v-for="(tag, tagIndex) in (product.tags ?? []).slice(0, maxTags)" :key="tagIndex" class="truncate rounded bg-card px-1.5 leading-5 max-md:hidden">
@@ -45,8 +42,8 @@
       <span
         class="inline-flex h-6 items-center gap-1 rounded-full bg-card px-2.5 text-xs font-medium text-foreground"
       >
-        <Zap v-if="product.fulfillment_type === 'auto'" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
-        {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
+        <Zap v-if="showsAutomaticDelivery(product)" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
+        {{ getFulfillmentTypeLabel(product) }}
       </span>
     </span>
 
@@ -93,23 +90,20 @@
     <div
       class="relative grid shrink-0 place-items-center overflow-hidden rounded-2xl"
       :class="[
-        lead ? 'max-md:aspect-square max-md:w-[42%] md:min-h-32 md:flex-1' : 'aspect-[16/10]',
-        hasImage ? 'bg-muted' : 'bg-[hsl(var(--h)_62%_94%)] dark:bg-[hsl(var(--h)_32%_17%)]',
+        lead ? 'aspect-square max-md:w-[42%] md:w-full' : 'aspect-square',
+        hasImage ? 'z-[4] bg-muted' : 'bg-[hsl(var(--h)_62%_94%)] dark:bg-[hsl(var(--h)_32%_17%)]',
         soldOut && 'grayscale',
       ]"
     >
-      <template v-if="hasImage">
-        <!-- 同一张图放大模糊，给托盘染上商品自己的色调 -->
-        <img :src="displayImageSrc" alt="" aria-hidden="true" loading="lazy" decoding="async"
-          class="absolute inset-0 h-full w-full scale-150 object-cover opacity-50 blur-2xl saturate-150" />
-        <!-- 绝对定位：不让图片的原始尺寸撑高卡片 -->
-        <div class="absolute inset-0 flex items-center justify-center">
-          <img :src="displayImageSrc" :alt="title" loading="lazy" decoding="async"
-            class="pcard-tile h-[62%] w-auto max-w-[80%] rounded-xl object-cover"
-            :class="lead && 'md:h-[56%] md:rounded-2xl'"
-            @error="handleImageError" />
-        </div>
-      </template>
+      <img
+        v-if="hasImage"
+        :src="displayImageSrc"
+        :alt="title"
+        loading="lazy"
+        decoding="async"
+        class="pcard-cover absolute inset-0 h-full w-full object-cover"
+        @error="handleImageError"
+      />
       <span v-else role="img" :aria-label="title"
         class="font-extrabold tracking-tighter text-[hsl(var(--h)_55%_38%)] dark:text-[hsl(var(--h)_55%_76%)]"
         :class="lead ? 'text-6xl md:text-8xl' : 'text-[44px]'">
@@ -128,14 +122,14 @@
       </p>
       <div class="mt-1 flex flex-wrap items-center justify-between gap-x-2 text-xs text-muted-foreground">
         <span class="inline-flex min-w-0 items-center gap-1">
-          <Zap v-if="product.fulfillment_type === 'auto'" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
-          <span class="shrink-0">{{ getFulfillmentTypeLabel(product.fulfillment_type) }}</span>
+          <Zap v-if="showsAutomaticDelivery(product)" class="h-3 w-3 shrink-0 fill-current text-warm" aria-hidden="true" />
+          <span class="shrink-0">{{ getFulfillmentTypeLabel(product) }}</span>
           <span v-for="(tag, tagIndex) in (product.tags ?? []).slice(0, maxTags)" :key="tagIndex"
             class="min-w-0 truncate rounded bg-secondary px-1.5 leading-5">
             {{ tag }}
           </span>
         </span>
-        <span v-if="product.stock_status === 'low_stock'" class="shrink-0 font-medium text-warning">
+        <span class="shrink-0 font-medium" :class="stock.text">
           {{ getStockStatusLabel(product) }}
         </span>
       </div>
@@ -152,25 +146,14 @@
           </span>
         </div>
         <button
-          v-if="lead"
           type="button"
-          class="h-8 shrink-0 whitespace-nowrap rounded-full bg-foreground px-3 text-[13px] font-semibold text-background transition-opacity hover:opacity-85 disabled:opacity-40 md:h-10 md:px-5 md:text-sm"
+          class="pcard-cart grid h-[34px] w-[34px] max-h-[34px] max-w-[34px] shrink-0 place-items-center rounded-full bg-secondary p-0 text-foreground transition-colors hover:bg-foreground hover:text-background disabled:pointer-events-none"
+          :aria-label="lead ? t('quickBuy.buyNow') : t('products.quickBuyAria')"
           :disabled="soldOut"
           @click.stop="$emit('quickBuy', product)"
           @keydown.enter.stop
         >
-          {{ t('quickBuy.buyNow') }}
-        </button>
-        <button
-          v-else
-          type="button"
-          class="pcard-cart grid h-[34px] w-[34px] shrink-0 place-items-center rounded-full bg-secondary text-foreground transition-colors hover:bg-foreground hover:text-background disabled:pointer-events-none"
-          :aria-label="t('products.quickBuyAria')"
-          :disabled="soldOut"
-          @click.stop="$emit('quickBuy', product)"
-          @keydown.enter.stop
-        >
-          <ShoppingCart class="h-4 w-4" />
+          <ShoppingCart class="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
     </div>
@@ -209,7 +192,7 @@ defineEmits<{
 
 const { t } = useI18n()
 const { getLocalizedText, siteCurrency, formatPrice } = useLocalized()
-const { getFulfillmentTypeLabel, getStockStatusLabel, isSoldOut, hasPromotionPrice, getPromotionPriceAmount, hasPromotionRules, hasWholesalePrices, getCardExclusivePrice } = useProductLabels()
+const { getFulfillmentTypeLabel, showsAutomaticDelivery, getStockStatusLabel, isSoldOut, hasPromotionPrice, getPromotionPriceAmount, hasPromotionRules, hasWholesalePrices, getCardExclusivePrice } = useProductLabels()
 const exclusivePrice = computed(() => getCardExclusivePrice(props.product))
 
 const title = computed(() => getLocalizedText(props.product.title))
@@ -288,9 +271,18 @@ const handleImageError = () => {
   transition: transform 250ms var(--ui-ease-out), box-shadow 250ms;
 }
 
-.pcard-tile {
-  box-shadow: 0 10px 20px -10px rgba(0, 0, 0, 0.4);
+.pcard-cover {
+  object-position: center;
   transition: transform 350ms var(--ui-ease-out);
+}
+
+.pcard-cart {
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  max-width: 34px;
+  max-height: 34px;
+  padding: 0;
 }
 
 @media (hover: hover) {
@@ -301,8 +293,8 @@ const handleImageError = () => {
   .dark .pcard:hover {
     box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16), 0 24px 44px -18px rgba(0, 0, 0, 0.8);
   }
-  .pcard:hover .pcard-tile {
-    transform: scale(1.06) rotate(-2deg);
+  .pcard:hover .pcard-cover {
+    transform: scale(1.04);
   }
   .pcard:hover .pcard-cart:not(:disabled) {
     background: var(--ui-text-primary);
@@ -331,12 +323,13 @@ const handleImageError = () => {
   .prow:hover .prow-buy:not(:disabled) {
     transform: scale(1.06);
   }
-  .prow:hover .pcard-tile {
-    transform: scale(1.1) rotate(-3deg);
+  .prow:hover .pcard-cover {
+    transform: scale(1.04);
   }
 }
 
 .pcard-flag {
+  z-index: 5;
   border-radius: 999px;
   padding: 0 0.5rem;
   font-size: 11px;
@@ -346,7 +339,7 @@ const handleImageError = () => {
 
 @media (prefers-reduced-motion: reduce) {
   .pcard,
-  .pcard-tile {
+  .pcard-cover {
     transition: none;
   }
 }

@@ -70,6 +70,7 @@ func setupPaymentServiceWalletTest(t *testing.T) (*PaymentService, *gorm.DB) {
 		&walletdomain.RechargeOrder{},
 		&paymentdomain.PaymentChannel{},
 		&paymentdomain.Payment{},
+		&paymentdomain.ProviderClaim{},
 		&settingsstore.SettingRecord{},
 	); err != nil {
 		t.Fatalf("auto migrate failed: %v", err)
@@ -1748,11 +1749,15 @@ func (failingAffiliate) HandleOrderPaid(uint) error { return errors.New("db busy
 
 type affiliateRetryQueue struct {
 	paymentcontract.Queue
-	retried []uint
+	retried     []uint
+	autoFulfill []uint
 }
 
-func (q *affiliateRetryQueue) Enabled() bool                         { return true }
-func (q *affiliateRetryQueue) EnqueueOrderAutoFulfill(uint) error    { return nil }
+func (q *affiliateRetryQueue) Enabled() bool { return true }
+func (q *affiliateRetryQueue) EnqueueOrderAutoFulfill(orderID uint) error {
+	q.autoFulfill = append(q.autoFulfill, orderID)
+	return nil
+}
 func (q *affiliateRetryQueue) EnqueueStatusEmail(uint, string) error { return nil }
 func (q *affiliateRetryQueue) EnqueueTimeoutCancel(uint, time.Duration) error {
 	return nil
@@ -1770,6 +1775,103 @@ func TestEnqueueOrderPaidAsyncRetriesFailedAffiliateCommission(t *testing.T) {
 	svc.enqueueOrderPaidAsync(order, nil, zap.NewNop().Sugar())
 	if len(queue.retried) != 1 || queue.retried[0] != 42 {
 		t.Fatalf("expected affiliate retry enqueued for order 42, got %v", queue.retried)
+	}
+}
+
+// 提交在线支付或未成功回调不得生成券；足额成功回调只把子订单交给自动交付队列一次。
+func TestCouponSalePaymentWaitsForConfirmedCallback(t *testing.T) {
+	svc, db := setupPaymentServiceWalletTest(t)
+	queue := &affiliateRetryQueue{}
+	svc.queue = queue
+	channel := createUnderpaidChannel(t, db, svc, "Coupon Sale Gateway", constants.PaymentChannelTypeWechat)
+	parent := createUnderpaidOrder(t, db, "DJCOUPONSALE1", 8, 6)
+	now := time.Now()
+	six := money.FromDecimal(decimal.NewFromInt(6))
+	three := money.FromDecimal(decimal.NewFromInt(3))
+	child := &orderdomain.Order{
+		OrderNo: "DJCOUPONSALE1-1", ParentID: &parent.ID, UserID: parent.UserID,
+		Status: constants.OrderStatusPendingPayment, Currency: "CNY",
+		OriginalAmount: six, TotalAmount: six, OnlinePaidAmount: six,
+		DiscountAmount: money.FromDecimal(decimal.Zero), PromotionDiscountAmount: money.FromDecimal(decimal.Zero),
+		WalletPaidAmount: money.FromDecimal(decimal.Zero), RefundedAmount: money.FromDecimal(decimal.Zero),
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := db.Create(child).Error; err != nil {
+		t.Fatalf("create child: %v", err)
+	}
+	item := &orderdomain.OrderItem{
+		OrderID: child.ID, ProductID: 45, TitleJSON: jsonmap.JSON{"zh-CN": "九折优惠券"},
+		UnitPrice: three, Quantity: 2, TotalPrice: six, FulfillmentType: constants.FulfillmentTypeManual,
+		CreatedAt: now, UpdatedAt: now,
+	}
+	item.MarkCouponSale()
+	if err := db.Create(item).Error; err != nil {
+		t.Fatalf("create item: %v", err)
+	}
+
+	created, err := svc.CreatePayment(CreatePaymentInput{
+		OrderID: parent.ID, ChannelID: channel.ID, Context: context.Background(),
+	})
+	if err != nil {
+		t.Fatalf("create payment: %v", err)
+	}
+	if _, err := svc.HandleCallback(PaymentCallbackInput{
+		PaymentID: created.Payment.ID, OrderNo: parent.OrderNo, ChannelID: channel.ID,
+		Status: constants.PaymentStatusPending, Amount: created.Payment.Amount, Currency: "CNY",
+	}); err != nil {
+		t.Fatalf("pending callback: %v", err)
+	}
+	assertCouponSaleStillUnpaid(t, db, parent.ID, child.ID)
+	if len(queue.autoFulfill) != 0 {
+		t.Fatalf("unpaid payment enqueued fulfillment: %v", queue.autoFulfill)
+	}
+
+	if _, err := svc.HandleCallback(PaymentCallbackInput{
+		PaymentID: created.Payment.ID, OrderNo: parent.OrderNo, ChannelID: channel.ID,
+		Status: constants.PaymentStatusSuccess, Amount: created.Payment.Amount, Currency: "CNY", ProviderRef: "coupon-sale-paid",
+	}); err != nil {
+		t.Fatalf("success callback: %v", err)
+	}
+	if len(queue.autoFulfill) != 1 || queue.autoFulfill[0] != child.ID {
+		t.Fatalf("paid callback should enqueue the coupon child once, got %v", queue.autoFulfill)
+	}
+	var fulfillmentCount int64
+	if err := db.Model(&fulfillmentdomain.Fulfillment{}).Count(&fulfillmentCount).Error; err != nil {
+		t.Fatalf("count fulfillment: %v", err)
+	}
+	if fulfillmentCount != 0 {
+		t.Fatalf("callback itself wrote fulfillment %d times", fulfillmentCount)
+	}
+	var paidChild orderdomain.Order
+	if err := db.First(&paidChild, child.ID).Error; err != nil {
+		t.Fatalf("reload child: %v", err)
+	}
+	if paidChild.Status != constants.OrderStatusPaid || paidChild.PaidAt == nil {
+		t.Fatalf("child should be paid and not yet delivered: %+v", paidChild)
+	}
+
+	if _, err := svc.HandleCallback(PaymentCallbackInput{
+		PaymentID: created.Payment.ID, OrderNo: parent.OrderNo, ChannelID: channel.ID,
+		Status: constants.PaymentStatusSuccess, Amount: created.Payment.Amount, Currency: "CNY", ProviderRef: "coupon-sale-paid",
+	}); err != nil {
+		t.Fatalf("replay callback: %v", err)
+	}
+	if len(queue.autoFulfill) != 1 {
+		t.Fatalf("replayed callback enqueued fulfillment again: %v", queue.autoFulfill)
+	}
+}
+
+func assertCouponSaleStillUnpaid(t *testing.T, db *gorm.DB, parentID, childID uint) {
+	t.Helper()
+	var parent, child orderdomain.Order
+	if err := db.First(&parent, parentID).Error; err != nil {
+		t.Fatalf("reload parent: %v", err)
+	}
+	if err := db.First(&child, childID).Error; err != nil {
+		t.Fatalf("reload child: %v", err)
+	}
+	if parent.Status != constants.OrderStatusPendingPayment || parent.PaidAt != nil || child.Status != constants.OrderStatusPendingPayment || child.PaidAt != nil {
+		t.Fatalf("order became paid early: parent=%s child=%s", parent.Status, child.Status)
 	}
 }
 

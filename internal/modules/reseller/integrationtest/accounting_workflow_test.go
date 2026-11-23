@@ -63,6 +63,7 @@ func openResellerAccountingServiceTestDB(t *testing.T) *gorm.DB {
 		&fulfillmentdomain.Fulfillment{},
 		&paymentdomain.Payment{},
 		&paymentdomain.PaymentChannel{},
+		&paymentdomain.ProviderClaim{},
 		&orderdomain.OrderRefundRecord{},
 		&resellerdomain.Profile{},
 		&resellerdomain.OrderSnapshot{},
@@ -448,7 +449,7 @@ func TestPaymentSuccessTransactionPostsResellerLedger(t *testing.T) {
 		OrderNo:     order.OrderNo,
 		ChannelID:   payment.ChannelID,
 		Status:      constants.PaymentStatusSuccess,
-		ProviderRef: payment.ProviderRef,
+		ProviderRef: "reseller-ledger-trade",
 		Amount:      payment.Amount,
 		Currency:    payment.Currency,
 	})

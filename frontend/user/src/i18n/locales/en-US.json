@@ -2,6 +2,7 @@
   "common": {
     "siteName": "Dujiao-Next",
     "loading": "Loading...",
+    "loadingRetry": "Still loading. Tap to retry",
     "error": "Error",
     "success": "Success",
     "confirm": "Confirm",
@@ -50,7 +51,8 @@
     "products": "Products",
     "blog": "Blog",
     "notice": "Notice",
-    "about": "About"
+    "about": "About",
+    "feed": "News"
   },
   "vault": {
     "hero": {
@@ -168,6 +170,14 @@
       "lowStockCount": "Low stock ({count} left)",
       "outOfStock": "Sold out"
     },
+    "stockTier": {
+      "low": "Low",
+      "mid": "Medium",
+      "high": "High",
+      "presale": "Low · Presale",
+      "unavailable": "Unavailable"
+    },
+    "presaleNotice": "You can still order when stock is low. Payment starts a presale and nothing is delivered until stock arrives.",
     "fulfillmentType": {
       "manual": "Manual delivery",
       "auto": "Auto fulfillment"
@@ -214,8 +224,8 @@
     "skuStockRangePlus": "{min}+ left",
     "stockUnavailable": "This product is currently out of stock and cannot be purchased",
     "stockBelowMinPurchase": "Available stock is below the minimum purchase quantity ({count})",
-    "addCartStockExceeded": "Insufficient stock for this SKU. You can purchase up to {count}",
-    "addCartStockExceededWithCart": "Insufficient stock for this SKU. You can purchase up to {count} ({cartCount} already in cart)",
+    "addCartStockExceeded": "Not enough stock for this option. Please lower the quantity",
+    "addCartStockExceededWithCart": "Not enough stock for this option. Please lower the quantity",
     "addCartLimitExceeded": "This product can be purchased up to {count} per order",
     "addCartLimitExceededWithCart": "This product can be purchased up to {count} per order ({cartCount} already in cart)"
   },
@@ -256,7 +266,12 @@
   "announcement": {
     "close": "Close",
     "dismissToday": "Don't show today",
-    "dismissForever": "Don't show again"
+    "dismissForever": "Don't show again",
+    "wechatLabel": "WeChat ID",
+    "wechatHint": "Copy the ID, or long-press the QR code to add it.",
+    "wechatCopy": "Copy WeChat ID",
+    "wechatCopied": "WeChat ID copied",
+    "wechatQrAlt": "WeChat QR code"
   },
   "about": {
     "title": "About Us",
@@ -285,6 +300,8 @@
   "bottomNav": {
     "home": "Home",
     "products": "Products",
+    "invite": "返钱",
+    "feed": "News",
     "cart": "Cart",
     "me": "Me"
   },
@@ -571,9 +588,12 @@
         "order_pay": "Order payment",
         "order_refund": "Order refund",
         "gift_card_redeem": "Gift card redeem",
+        "affiliate_commission": "Affiliate commission",
+        "affiliate_commission_reversal": "Affiliate commission reversal",
         "admin_adjust": "Admin adjustment",
         "admin_refund": "Admin refund",
-        "order_underpaid_credit": "Underpaid order credit"
+        "order_underpaid_credit": "Underpaid order credit",
+        "daily_checkin": "Daily check-in"
       },
       "errors": {
         "loadFailed": "Failed to load wallet data, please try again later",
@@ -585,9 +605,27 @@
         "rechargeStateFailed": "Recharge payment was not successful, please try again with another channel"
       }
     },
+    "checkin": {
+      "title": "Daily check-in",
+      "subtitle": "Check in each day for a random shopping reward. You can see the amount after it arrives. The balance can only be used for in-store purchases and cannot be withdrawn.",
+      "claim": "Check in",
+      "claiming": "Checking in",
+      "claimed": "Checked in today",
+      "success": "Checked in",
+      "reward": "Today's reward",
+      "balance": "Shopping balance",
+      "tomorrow": "You can check in again after Beijing midnight on {date}",
+      "debtNote": "The amount shown is the reward that arrived.",
+      "debtOffset": "{amount} of this reward offset unrecovered affiliate commission.",
+      "errors": {
+        "loadFailed": "Couldn't load check-in status. Please try again.",
+        "claimFailed": "Check-in failed. Please try again."
+      }
+    },
     "affiliate": {
       "title": "Affiliate Center",
-      "subtitle": "Track referrals and commissions, then submit withdraw requests",
+      "subtitle": "Open it to get your invite link. Confirmed commission is added to your shoppable balance and cannot be withdrawn.",
+      "balanceShopOnly": "Commission and check-in rewards stay in the shopping balance. They can only be used for in-store purchases and cannot be withdrawn.",
       "notOpened": "Affiliate is not enabled for your account yet. Open it to get your unique affiliate ID and promotion URL.",
       "openButton": "Open Affiliate",
       "opening": "Opening...",
@@ -598,7 +636,7 @@
       "conversionRate": "Conversion Rate",
       "conversionDetail": "Clicks {clicks} · Valid Orders {orders}",
       "pendingCommission": "Pending Commission",
-      "availableCommission": "Available Commission",
+      "availableCommission": "Spendable commission",
       "withdrawnCommission": "Total Withdrawn",
       "withdrawTitle": "Apply Withdraw",
       "withdrawSubtitle": "Fill amount, channel and account to submit for review",
@@ -631,7 +669,8 @@
         "pendingConfirm": "Pending Confirm",
         "available": "Available",
         "rejected": "Rejected",
-        "withdrawn": "Withdrawn"
+        "withdrawn": "Withdrawn",
+        "walletCredited": "Added to balance"
       },
       "withdrawStatus": {
         "pendingReview": "Pending Review",
@@ -720,7 +759,7 @@
           "announcement": "Announcement"
         },
         "descriptions": {
-          "brand": "Set the site name, logo, and browser favicon",
+          "brand": "Set the site name, logo, browser favicon, and this store's wallpaper",
           "support": "Contact entries shown on the storefront; leave blank to hide",
           "seo": "Search engine and social sharing info, per language",
           "announcement": "An announcement shown to visitors in a popup on the storefront home page",
@@ -766,6 +805,9 @@
         "upload": "Upload",
         "replace": "Replace",
         "uploadHint": "JPG / PNG / WebP / GIF / SVG, within the site size limit",
+        "wallpaperHint": "Affects only this store. JPG, PNG, or WebP, up to 8 MB, longest side 4096 px. Remove and save to inherit again: the main store wallpaper is used, or the original theme background when the main store has none. This does not change the main store or other agents.",
+        "wallpaperRemove": "Remove wallpaper",
+        "wallpaperInvalid": "Choose a JPG, PNG, or WebP image up to 8 MB",
         "uploadFailed": "Image upload failed, please try again",
         "editor": {
           "placeholder": "Write the announcement, with images, links and formatting…",
@@ -795,6 +837,7 @@
           "siteName": "Site Name",
           "logo": "Logo URL",
           "favicon": "Favicon URL",
+          "wallpaper": "Store wallpaper",
           "telegram": "Telegram",
           "whatsapp": "WhatsApp",
           "email": "Support Email",
@@ -1019,6 +1062,17 @@
       "emailPlaceholder": "Enter email",
       "passwordLabel": "Password",
       "passwordPlaceholder": "Enter password",
+      "modePassword": "Password",
+      "modeEmailCode": "Email code",
+      "emailCodeSubtitle": "Send a code to an existing account. The code cannot register a new account.",
+      "emailCodeLabel": "Email code",
+      "emailCodePlaceholder": "Enter the code",
+      "sendEmailCode": "Send code",
+      "emailCodeCountdown": "Resend in {seconds}s",
+      "emailCodeSent": "If this email can sign in, the code is on its way.",
+      "emailCodeRequired": "Enter the email code",
+      "emailCodeHint": "The code only signs in an existing usable account. It does not create one.",
+      "emailCodeSubmit": "Sign in with code",
       "rememberMe": "Remember me",
       "forgot": "Forgot password?",
       "submit": "Login",
@@ -1166,7 +1220,7 @@
     "checkout": "Checkout",
     "stockOut": "This SKU is out of stock. Please reduce quantity or remove it",
     "stockRemaining": "{count} left for this SKU",
-    "stockExceeded": "Insufficient stock for this SKU. Cart quantity can be up to {count}",
+    "stockExceeded": "Not enough stock for this option. Please lower the quantity",
     "maxPurchaseExceeded": "This product can be purchased up to {count} per order",
     "minPurchaseNotMet": "This product requires at least {count} per order"
   },
@@ -1324,6 +1378,9 @@
     "submitting": "Processing...",
     "orderNotFound": "Order not found or failed to load",
     "createFailed": "Failed to create payment",
+    "payLinkRejected": "The cashier could not be opened. This payment page is still here; use the button below to try again.",
+    "payLinkBlocked": "The browser blocked the payment window. Use the button below to open the cashier.",
+    "qrFailed": "The QR code was not created. Refresh this page, or use the button below to open the cashier.",
     "captureFailed": "Failed to confirm payment, please refresh and retry",
     "redirecting": "Payment confirmed, redirecting to order detail...",
     "orderExpired": "Order expired, please place a new order",
@@ -1693,13 +1750,15 @@
     "childFulfillmentTitle": "Child fulfillment",
     "childFulfillmentEmpty": "No fulfillment yet",
     "manualSubmissionTitle": "Submitted information",
+    "presalePending": "Presale order. It ships after restock and is not marked delivered at payment.",
     "fulfillmentTitle": "Fulfillment",
     "fulfillmentType": "Type",
     "fulfillmentStatus": "Status",
     "instructionsTitle": "Usage instructions",
     "fulfillmentTypes": {
       "manual": "Manual",
-      "auto": "Auto"
+      "auto": "Auto",
+      "coupon": "Auto"
     },
     "fulfillmentStatuses": {
       "pending": "Pending",
@@ -1747,5 +1806,92 @@
     "authInvalid": "Credentials mismatch, please try again",
     "authSubmit": "Save and search",
     "authClear": "Clear saved info"
+  },
+  "paymentProtection": {
+    "title": "Checkout check",
+    "waiting": "Checking, please wait",
+    "step": "Step {current} of {total}",
+    "done": "Done",
+    "cancel": "Cancel",
+    "retry": "Retry",
+    "limited": "This source cannot place an order right now",
+    "failed": "The check did not finish, so no order was created",
+    "steps": {
+      "1": "Review this order",
+      "2": "Confirm the source and environment mark with this site",
+      "3": "Let the server check stock, discounts, balance, and risk",
+      "4": "Create the payment request and open checkout"
+    }
+  },
+  "feed": {
+    "title": "News",
+    "subtitle": "Public AI news and reset notices. This page has no personal quota and does not ask for an AI account.",
+    "disclaimer": "This page shows public news summaries, plus quota resets and reset cards from the reset calendar. A verified occurrence day says in effect. Every other circled day says recorded. It has no personal quota and does not predict an unpublished reset.",
+    "coverage": "Currently covered: {names}",
+    "loading": "Reading public news",
+    "loadFailed": "Public data could not be read. Checkout and payment are unaffected",
+    "retry": "Read again",
+    "dailyTitle": "Daily summary",
+    "newsTitle": "News",
+    "hotTitle": "Hot topics",
+    "resetsTitle": "Reset notices",
+    "resetsHint": "Red circles mark quota resets and reset cards. A verified occurrence day says in effect. Any other circled day is the recorded date and does not mean that day was confirmed effective. Tap a date to see that day's type, status, and count.",
+    "noResetDate": "None yet",
+    "noDateThisMonth": "This month has no quota reset or reset card marked",
+    "quotaReset": "Quota reset",
+    "resetCard": "Reset card",
+    "monthCounts": "This month: {quota} quota resets, {cards} reset cards",
+    "eventCount": "{count}",
+    "resetStatus": {
+      "effective": "In effect",
+      "recorded": "Recorded",
+      "announced": "Announced",
+      "unconfirmed": "Unconfirmed"
+    },
+    "confirmedMark": "Confirmed",
+    "estimatedMark": "Estimate",
+    "estimatedNote": "An estimate is not a promise",
+    "today": "Today",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "dayConfirmed": "{date}, confirmed reset day",
+    "dayEstimated": "{date}, estimate, not a promise",
+    "weekday": {
+      "mon": "Mo",
+      "tue": "Tu",
+      "wed": "We",
+      "thu": "Th",
+      "fri": "Fr",
+      "sat": "Sa",
+      "sun": "Su"
+    },
+    "noDaily": "No daily summary right now",
+    "noNews": "No news right now",
+    "noHot": "No hot topics right now",
+    "noReset": "No published notice",
+    "updatedAt": "Updated {time}",
+    "announcedAt": "Announced {time}",
+    "confirmedAt": "Confirmed {time}",
+    "checkedAt": "Checked {time}",
+    "schedule": "Published schedule: {text}",
+    "estimate": "Estimate: {text}",
+    "estimated": "Estimate",
+    "statusWithTime": "{status} · last success {time}",
+    "status": {
+      "ok": "Updated",
+      "empty": "Nothing new",
+      "stale": "New data is unavailable; showing the last success",
+      "unavailable": "Unavailable",
+      "rate_limited": "Reading is delayed and backing off",
+      "refused": "This read was refused",
+      "disabled": "The news column is turned off"
+    },
+    "providers": {
+      "codex": "Codex",
+      "antigravity": "Antigravity",
+      "claude": "Claude",
+      "grok-bot": "Grok Bot",
+      "grok_bot": "Grok Bot"
+    }
   }
 }

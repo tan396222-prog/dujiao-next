@@ -87,6 +87,16 @@ export const useUserAuthStore = defineStore('user-auth', () => {
         }
     }
 
+    const loginWithEmailCode = async (payload: any) => {
+        loading.value = true
+        try {
+            const response = await userAuthAPI.loginWithEmailCode(payload)
+            return handleLoginResponse(response.data.data)
+        } finally {
+            loading.value = false
+        }
+    }
+
     const verify2FA = async (payload: { code?: string; recovery_code?: string }) => {
         if (!challengeToken.value) {
             throw new Error('challenge_token_missing')
@@ -232,6 +242,7 @@ export const useUserAuthStore = defineStore('user-auth', () => {
         sendVerifyCode,
         register,
         login,
+        loginWithEmailCode,
         verify2FA,
         clearChallenge,
         telegramLogin,

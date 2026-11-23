@@ -320,7 +320,14 @@ func configureTrustedProxies(engine *gin.Engine, trustedProxies []string) error 
 			return fmt.Errorf("trusted proxy %q would trust every address", proxy)
 		}
 	}
-	return engine.SetTrustedProxies(trustedProxies)
+	if err := engine.SetTrustedProxies(trustedProxies); err != nil {
+		return err
+	}
+	// 只接受受控代理改写的 X-Forwarded-For。X-Real-IP 和 CF-Connecting-IP 可由客户端自报，不能作为封禁键。
+	engine.RemoteIPHeaders = []string{"X-Forwarded-For"}
+	engine.TrustedPlatform = ""
+	engine.ForwardedByClientIP = true
+	return nil
 }
 
 type adminPermissionCatalogItem struct {

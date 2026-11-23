@@ -1,6 +1,9 @@
 package application
 
 import (
+	"crypto/sha256"
+	"encoding/base32"
+	"fmt"
 	"strings"
 	"time"
 
@@ -165,8 +168,65 @@ func matchesCouponMemberLevel(coupon *coupondomain.Coupon, memberLevelID uint) b
 	return false
 }
 
+// SaleCouponCode 为同一订单项的第 sequence 张券生成稳定优惠码，支付回调重试不会再发一张。
+func SaleCouponCode(orderItemID uint, sequence int) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("dujiao-coupon-sale:%d:%d", orderItemID, sequence)))
+	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(sum[:])
+	return "DJ" + strings.ToUpper(encoded[:10])
+}
+
+// EnsureSaleCoupon 发放或取回一张永久有效、仅可使用一次的九折券。
+// 九折是在售价上减 10%，百分比券的 value 因此是 10。
+func (s *Service) EnsureSaleCoupon(repo couponcontract.Repository, orderItemID uint, sequence int) (string, error) {
+	if s == nil {
+		return "", couponcontract.ErrInvalid
+	}
+	if repo == nil {
+		repo = s.couponRepo
+	}
+	if repo == nil || orderItemID == 0 || sequence <= 0 {
+		return "", couponcontract.ErrInvalid
+	}
+	code := SaleCouponCode(orderItemID, sequence)
+	existing, err := repo.GetByCode(code)
+	if err != nil {
+		return "", err
+	}
+	if existing != nil {
+		return existing.Code, nil
+	}
+	now := time.Now()
+	coupon := &coupondomain.Coupon{
+		Code:         code,
+		Type:         constants.CouponTypePercent,
+		Value:        money.FromDecimal(decimal.NewFromInt(10)),
+		MinAmount:    money.FromDecimal(decimal.Zero),
+		MaxDiscount:  money.FromDecimal(decimal.Zero),
+		UsageLimit:   1,
+		PerUserLimit: 1,
+		ScopeType:    constants.ScopeTypeStore,
+		ScopeRefIDs:  "[]",
+		ScopeSKUIDs:  "[]",
+		IsActive:     true,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := repo.Create(coupon); err != nil {
+		existing, getErr := repo.GetByCode(code)
+		if getErr == nil && existing != nil {
+			return existing.Code, nil
+		}
+		return "", err
+	}
+	return code, nil
+}
+
 func (s *Service) resolveCouponEligibility(coupon *coupondomain.Coupon, items []couponcontract.EligibilityItem) (couponEligibility, error) {
-	if strings.ToLower(strings.TrimSpace(coupon.ScopeType)) != constants.ScopeTypeProduct {
+	scope := strings.ToLower(strings.TrimSpace(coupon.ScopeType))
+	if scope == constants.ScopeTypeStore {
+		return storeCouponEligibility(items)
+	}
+	if scope != constants.ScopeTypeProduct {
 		return couponEligibility{}, couponcontract.ErrScopeInvalid
 	}
 
@@ -201,6 +261,9 @@ func (s *Service) resolveCouponEligibility(coupon *coupondomain.Coupon, items []
 			wholesaleExcluded++
 			continue
 		}
+		if item.CouponExcluded {
+			continue
+		}
 		eligible = eligible.Add(item.TotalPrice.Decimal)
 		if item.Quantity > 0 {
 			eligibleQuantity += item.Quantity
@@ -211,6 +274,27 @@ func (s *Service) resolveCouponEligibility(coupon *coupondomain.Coupon, items []
 		if scopeMatched > 0 && wholesaleExcluded == scopeMatched {
 			return couponEligibility{}, couponcontract.ErrWholesaleDisabled
 		}
+		return couponEligibility{}, couponcontract.ErrScopeInvalid
+	}
+	return couponEligibility{
+		subtotal: money.FromDecimal(eligible),
+		quantity: eligibleQuantity,
+	}, nil
+}
+
+func storeCouponEligibility(items []couponcontract.EligibilityItem) (couponEligibility, error) {
+	eligible := decimal.Zero
+	eligibleQuantity := 0
+	for _, item := range items {
+		if item.CouponExcluded {
+			continue
+		}
+		eligible = eligible.Add(item.TotalPrice.Decimal)
+		if item.Quantity > 0 {
+			eligibleQuantity += item.Quantity
+		}
+	}
+	if eligible.LessThanOrEqual(decimal.Zero) {
 		return couponEligibility{}, couponcontract.ErrScopeInvalid
 	}
 	return couponEligibility{

@@ -10,8 +10,8 @@
       >
         <!-- Home -->
         <Home v-if="item.icon === 'home'" class="w-5 h-5" />
-        <!-- Products -->
-        <LayoutGrid v-else-if="item.icon === 'products'" class="w-5 h-5" />
+        <Rss v-else-if="item.icon === 'feed'" class="w-5 h-5" />
+        <UserPlus v-else-if="item.icon === 'invite'" class="w-5 h-5" />
         <!-- Cart -->
         <div v-else-if="item.icon === 'cart'" class="relative">
           <ShoppingCart class="w-5 h-5" />
@@ -22,7 +22,7 @@
         </div>
         <!-- Me -->
         <User v-else-if="item.icon === 'me'" class="w-5 h-5" />
-        <span>{{ t(item.label) }}</span>
+        <span :class="item.icon === 'invite' ? 'nav-rebate-label' : ''">{{ t(item.label) }}</span>
       </router-link>
     </div>
   </nav>
@@ -32,7 +32,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { Home, LayoutGrid, ShoppingCart, User } from 'lucide-vue-next'
+import { Home, Rss, ShoppingCart, User, UserPlus } from 'lucide-vue-next'
 import { useCartStore } from '../stores/cart'
 import { useUserAuthStore } from '../stores/userAuth'
 import { useAppStore } from '../stores/app'
@@ -44,15 +44,17 @@ const userAuthStore = useUserAuthStore()
 const appStore = useAppStore()
 
 const cartCount = computed(() => cartStore.totalItems)
-const isListMode = computed(() => appStore.config?.template_mode === 'list')
 
 const navItems = computed(() => {
   const items = [
     { path: '/', icon: 'home', label: 'bottomNav.home' },
-    ...(!isListMode.value ? [{ path: '/products', icon: 'products', label: 'bottomNav.products' }] : []),
+    { path: '/me/affiliate', icon: 'invite', label: 'bottomNav.invite' },
     { path: '/cart', icon: 'cart', label: 'bottomNav.cart' },
     { path: userAuthStore.isAuthenticated ? '/me' : '/auth/login', icon: 'me', label: 'bottomNav.me' },
   ]
+  if (appStore.config?.ai_feed_enabled !== false) {
+    items.splice(1, 0, { path: '/feed', icon: 'feed', label: 'bottomNav.feed' })
+  }
   return items
 })
 

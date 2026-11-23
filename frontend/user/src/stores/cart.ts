@@ -29,6 +29,7 @@ export interface CartItem {
     maxPurchaseQuantity?: number
     purchaseType?: string
     fulfillmentType?: string
+    couponSale?: boolean
     manualFormSchema?: any
     paymentChannelIds?: number[]
 }
@@ -111,6 +112,7 @@ const loadCartItems = (): CartItem[] => {
                     skuStockQuantityHidden: normalizeOptionalBoolean(row.skuStockQuantityHidden ?? row.sku_stock_quantity_hidden),
                     skuStockEnforced: normalizeOptionalBoolean(row.skuStockEnforced ?? row.sku_stock_enforced),
                     skuStockSnapshotAt: normalizeOptionalString(row.skuStockSnapshotAt ?? row.sku_stock_snapshot_at),
+                    couponSale: row.couponSale === true || row.coupon_sale === true,
                     minPurchaseQuantity: normalizeOptionalLimitNumber(row.minPurchaseQuantity ?? row.min_purchase_quantity),
                     maxPurchaseQuantity: normalizeOptionalLimitNumber(row.maxPurchaseQuantity ?? row.max_purchase_quantity),
                 } as CartItem
@@ -166,6 +168,7 @@ export const useCartStore = defineStore('cart', () => {
             existing.maxPurchaseQuantity = normalizedItem.maxPurchaseQuantity
             existing.purchaseType = normalizedItem.purchaseType
             existing.fulfillmentType = normalizedItem.fulfillmentType
+            existing.couponSale = normalizedItem.couponSale
             existing.manualFormSchema = normalizedItem.manualFormSchema
             existing.skuId = normalizedItem.skuId
             existing.skuCode = normalizedItem.skuCode

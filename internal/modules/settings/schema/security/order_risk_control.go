@@ -20,7 +20,8 @@ type OrderRateLimitConfig struct {
 
 // OrderRiskCommonPolicy 保存与购买身份无关的订单风控策略。
 type OrderRiskCommonPolicy struct {
-	IPBlacklist []string `json:"ip_blacklist"`
+	IPBlacklist  []string             `json:"ip_blacklist"`
+	AttemptLimit OrderRateLimitConfig `json:"attempt_limit"`
 }
 
 // OrderRiskGuestPolicy 保存以可信客户端 IP 为主体的游客库存保护策略。
@@ -56,7 +57,15 @@ func DefaultOrderRiskControlConfig() OrderRiskControlConfig {
 	return OrderRiskControlConfig{
 		Version: orderRiskControlVersion,
 		Enabled: false,
-		Common:  OrderRiskCommonPolicy{IPBlacklist: []string{}},
+		Common: OrderRiskCommonPolicy{
+			IPBlacklist: []string{},
+			AttemptLimit: OrderRateLimitConfig{
+				Enabled:       true,
+				WindowSeconds: 60,
+				MaxRequests:   20,
+				BlockSeconds:  86400,
+			},
+		},
 		Guest: OrderRiskGuestPolicy{
 			Enabled:                        true,
 			MaxPendingOrdersPerIP:          2,
@@ -94,6 +103,7 @@ func NormalizeOrderRiskControlConfig(cfg OrderRiskControlConfig) OrderRiskContro
 	cfg.Guest.MaxPendingQuantityPerIPProduct = normalizeRiskLimit(cfg.Guest.MaxPendingQuantityPerIPProduct, 100000, defaults.Guest.MaxPendingQuantityPerIPProduct)
 	cfg.Guest.PaymentExpireMinutes = normalizeRiskLimit(cfg.Guest.PaymentExpireMinutes, 10080, defaults.Guest.PaymentExpireMinutes)
 	cfg.Guest.RateLimit = normalizeRateLimit(cfg.Guest.RateLimit, defaults.Guest.RateLimit)
+	cfg.Common.AttemptLimit = normalizeRateLimit(cfg.Common.AttemptLimit, defaults.Common.AttemptLimit)
 
 	cfg.Member.MaxPendingOrdersPerUser = normalizeRiskLimit(cfg.Member.MaxPendingOrdersPerUser, 100, defaults.Member.MaxPendingOrdersPerUser)
 	cfg.Member.MaxPendingOrdersPerIP = normalizeRiskLimit(cfg.Member.MaxPendingOrdersPerIP, 100, defaults.Member.MaxPendingOrdersPerIP)

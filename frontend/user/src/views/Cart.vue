@@ -41,8 +41,8 @@
                   <p v-if="itemSkuDisplay(item)" class="mt-1 truncate text-[13px] text-muted-foreground">{{ itemSkuDisplay(item) }}</p>
                   <div class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                     <span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2 py-0.5 font-medium text-foreground">
-                      <Zap v-if="item.fulfillmentType === 'auto'" class="h-3 w-3 text-warm" aria-hidden="true" />
-                      {{ item.fulfillmentType === 'auto' ? t('products.fulfillmentType.auto') : t('products.fulfillmentType.manual') }}
+                      <Zap v-if="showsAutomaticDelivery(item)" class="h-3 w-3 text-warm" aria-hidden="true" />
+                      {{ showsAutomaticDelivery(item) ? t('products.fulfillmentType.auto') : t('products.fulfillmentType.manual') }}
                     </span>
                     <span class="rounded-full bg-secondary px-2 py-0.5 font-medium text-foreground">
                       {{ item.purchaseType === 'guest' ? t('productPurchase.guest') : t('productPurchase.member') }}
@@ -79,7 +79,7 @@
                     :value="item.quantity"
                     @change="handleQtyChange(item, $event)"
                     :min="itemPurchaseMin(item)"
-                    :max="itemMaxQuantity(item)"
+                    :max="itemPurchaseLimit(item) || undefined"
                     class="cart-qty-input h-8 w-11 border-none bg-transparent p-0 text-center text-sm font-semibold tabular-nums text-foreground focus:outline-none focus:ring-0"
                   />
                   <button
@@ -140,6 +140,7 @@ import EmptyState from '../components/EmptyState.vue'
 import SmartImage from '../components/SmartImage.vue'
 import CheckoutSteps from '../components/checkout/CheckoutSteps.vue'
 import { useCart } from '../composables/useCart'
+import { showsAutomaticDelivery } from '../utils/fulfillment'
 
 const { t } = useI18n()
 
@@ -147,7 +148,7 @@ const {
   getLocalizedText, formatPrice, totalCurrency,
   cartItems, totalItems, totalAmount,
   cartItemKey, cartItemImage, itemSkuDisplay, itemSubtotal, itemStockHint, quantityWarning,
-  itemPurchaseMin, itemMaxQuantity,
+  itemPurchaseMin, itemPurchaseLimit, itemMaxQuantity,
   removeWithUndo, updateQty, handleQtyChange,
 } = useCart()
 </script>

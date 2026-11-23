@@ -76,7 +76,20 @@ const handleDismissForever = () => {
   close()
 }
 
+const wechatID = 'TCY15216367909'
+const copied = ref(false)
 const dialogRef = ref<HTMLElement | null>(null)
+
+const copyWechat = async () => {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(wechatID)
+    }
+    copied.value = true
+  } catch {
+    copied.value = false
+  }
+}
 
 const onKeydown = (e: KeyboardEvent) => {
   if (e.key === 'Escape') {
@@ -134,11 +147,11 @@ onBeforeUnmount(() => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="announcement-modal-title"
-            class="bg-card text-card-foreground relative z-10 flex max-h-[86vh] w-full max-w-lg flex-col overflow-hidden rounded-3xl border"
-            style="box-shadow: var(--ui-shadow-card)"
+            class="announcement-sheet relative z-10 flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-3xl"
+            data-announcement-sheet
           >
             <!-- Header -->
-            <div class="flex items-center gap-4 px-6 pb-5 pt-6">
+            <div class="flex shrink-0 items-center gap-4 px-6 pb-5 pt-6">
               <div
                 class="flex size-12 shrink-0 items-center justify-center rounded-2xl ring-1 ring-inset"
                 :class="typeStyle.iconWrap"
@@ -147,13 +160,13 @@ onBeforeUnmount(() => {
               </div>
               <h3
                 id="announcement-modal-title"
-                class="line-clamp-2 min-w-0 flex-1 text-lg font-semibold leading-snug text-foreground"
+                class="announcement-title line-clamp-2 min-w-0 flex-1 text-lg font-bold leading-snug"
               >
                 {{ title }}
               </h3>
               <button
                 type="button"
-                class="flex size-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                class="announcement-icon-button flex size-8 shrink-0 items-center justify-center rounded-full"
                 :aria-label="t('announcement.close')"
                 @click="handleClose"
               >
@@ -162,24 +175,38 @@ onBeforeUnmount(() => {
             </div>
 
             <!-- Body -->
-            <div class="min-h-0 flex-1 overflow-y-auto px-6 pb-2">
-              <div class="theme-prose prose prose-sm max-w-none dark:prose-invert" v-html="sanitizedContent"></div>
+            <div class="min-h-0 flex-1 overflow-y-auto px-6 pb-4">
+              <div class="announcement-copy" v-html="sanitizedContent"></div>
+              <section class="wechat-contact" data-wechat-contact>
+                <p class="wechat-label">{{ t('announcement.wechatLabel') }}</p>
+                <p class="wechat-id" data-wechat-id>{{ wechatID }}</p>
+                <button type="button" class="wechat-copy" data-wechat-copy @click="copyWechat">
+                  {{ copied ? t('announcement.wechatCopied') : t('announcement.wechatCopy') }}
+                </button>
+                <p class="wechat-hint">{{ t('announcement.wechatHint') }}</p>
+                <img
+                  class="wechat-qr"
+                  src="/wechat-qr.jpg"
+                  :alt="t('announcement.wechatQrAlt')"
+                  width="240"
+                />
+              </section>
             </div>
 
             <!-- Footer -->
-            <div class="flex flex-col gap-3 border-t px-6 pb-5 pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex shrink-0 flex-col gap-3 border-t px-6 pb-5 pt-4 sm:flex-row sm:items-center sm:justify-between">
               <div class="flex items-center justify-center gap-2 text-xs sm:justify-start">
                 <Button
                   variant="link"
-                  class="h-auto p-0 text-xs font-normal text-muted-foreground hover:text-foreground"
+                  class="announcement-dismiss h-auto p-0 text-xs font-semibold"
                   @click="handleDismissToday"
                 >
                   {{ t('announcement.dismissToday') }}
                 </Button>
-                <span class="select-none opacity-30 text-muted-foreground">·</span>
+                <span class="announcement-dismiss select-none">·</span>
                 <Button
                   variant="link"
-                  class="h-auto p-0 text-xs font-normal text-muted-foreground hover:text-foreground"
+                  class="announcement-dismiss h-auto p-0 text-xs font-semibold"
                   @click="handleDismissForever"
                 >
                   {{ t('announcement.dismissForever') }}
@@ -195,3 +222,62 @@ onBeforeUnmount(() => {
     </Transition>
   </Teleport>
 </template>
+
+<style scoped>
+.announcement-sheet {
+  background-color: #ffffff !important;
+  color: #111111;
+  opacity: 1;
+  border: 1px solid #e6e6e6;
+}
+
+.announcement-title,
+.announcement-icon-button,
+.announcement-dismiss {
+  color: #111111;
+}
+
+.announcement-sheet :deep(.announcement-copy),
+.announcement-sheet :deep(.announcement-copy :where(p, li, span, div, h1, h2, h3, h4, h5, h6, blockquote, td, th, strong, em, a, code)) {
+  color: #111111 !important;
+  font-weight: 700;
+  opacity: 1;
+}
+
+.wechat-contact {
+  margin-top: 1.25rem;
+  color: #111111;
+}
+
+.wechat-label,
+.wechat-hint,
+.wechat-copy,
+.wechat-id {
+  color: #111111;
+  font-weight: 700;
+}
+
+.wechat-id {
+  margin: 0.25rem 0;
+  font-weight: 800;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.wechat-copy {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.wechat-qr {
+  display: block;
+  width: min(240px, 72vw);
+  height: auto;
+  max-width: 100%;
+  margin-top: 0.75rem;
+  background: #ffffff;
+  -webkit-touch-callout: default;
+}
+</style>

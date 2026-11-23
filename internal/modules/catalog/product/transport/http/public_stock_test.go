@@ -1,12 +1,35 @@
 package producthttp
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	productdomain "github.com/dujiao-next/internal/modules/catalog/product/domain"
 
 	"github.com/dujiao-next/internal/constants"
 )
+
+func TestCouponSalePublicViewKeepsManualInventoryType(t *testing.T) {
+	view := publicProductView{Product: productdomain.Product{
+		ID:               45,
+		Slug:             "coupon-10off-3",
+		FulfillmentType:  constants.FulfillmentTypeManual,
+		CouponSale:       true,
+		ManualStockTotal: constants.ManualStockUnlimited,
+	}}
+	resp := view.toProductResp()
+	if resp.FulfillmentType != constants.FulfillmentTypeManual || !resp.CouponSale {
+		t.Fatalf("public view = type %s coupon_sale %v", resp.FulfillmentType, resp.CouponSale)
+	}
+	raw, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), `"fulfillment_type":"auto"`) {
+		t.Fatalf("coupon sale was published as card-secret auto: %s", raw)
+	}
+}
 
 func TestDecorateProductStock_AutoSkipsInactiveSKUs(t *testing.T) {
 	h := &PublicHandler{}
@@ -52,6 +75,31 @@ func TestDecorateProductStock_AutoSkipsInactiveSKUs(t *testing.T) {
 	}
 	if item.IsSoldOut {
 		t.Fatalf("expected product not sold out when active sku has stock")
+	}
+	if !item.Backorder {
+		t.Fatal("local auto stock can be ordered before restock")
+	}
+}
+
+func TestDecorateProductStock_ManualZeroStaysPurchasable(t *testing.T) {
+	h := &PublicHandler{}
+	product := &productdomain.Product{
+		ID:              2,
+		FulfillmentType: constants.FulfillmentTypeManual,
+		SKUs: []productdomain.ProductSKU{{
+			ID:               21,
+			SKUCode:          productdomain.DefaultSKUCode,
+			IsActive:         true,
+			ManualStockTotal: 0,
+		}},
+	}
+	item := publicProductView{Product: *product}
+	h.decorateProductStock(product, &item)
+	if !item.Backorder || item.IsSoldOut {
+		t.Fatalf("zero local stock is presale, backorder=%v soldout=%v", item.Backorder, item.IsSoldOut)
+	}
+	if item.StockStatus != constants.ProductStockStatusOutOfStock {
+		t.Fatalf("stock status %s", item.StockStatus)
 	}
 }
 
@@ -155,4 +203,155 @@ func TestPublicProductResponseRangeModeReturnsBucketOnly(t *testing.T) {
 	if sku.ManualStockTotal == 42 {
 		t.Fatalf("expected sku manual stock to be masked, got exact value %d", sku.ManualStockTotal)
 	}
+	if resp.ManualStockAvailable != 0 || sku.ManualStockTotal != 0 || sku.ManualStockSold != 0 {
+		t.Fatalf("range mode still published a positive count product=%d sku=%d sold=%d", resp.ManualStockAvailable, sku.ManualStockTotal, sku.ManualStockSold)
+	}
+}
+
+func TestPublicProductResponseHidesFiniteCardCountsButKeepsTiers(t *testing.T) {
+	h := &PublicHandler{}
+	product := &productdomain.Product{
+		ID:               7,
+		FulfillmentType:  constants.FulfillmentTypeAuto,
+		StockDisplayMode: constants.ProductStockDisplayRange,
+		SKUs: []productdomain.ProductSKU{
+			{ID: 1, SKUCode: "single", IsActive: true, AutoStockAvailable: 1, AutoStockTotal: 1, AutoStockSold: 4},
+			{ID: 2, SKUCode: "mid", IsActive: true, AutoStockAvailable: 9, AutoStockTotal: 12, AutoStockSold: 3},
+		},
+	}
+
+	resp, err := h.decoratePublicProduct(product, nil)
+	if err != nil {
+		t.Fatalf("decoratePublicProduct failed: %v", err)
+	}
+	if resp.StockStatus != constants.ProductStockStatusInStock || resp.StockDisplay != constants.ProductStockDisplayRange6To20 {
+		t.Fatalf("product tier mismatch status=%s display=%s", resp.StockStatus, resp.StockDisplay)
+	}
+	if !resp.StockQuantityHidden || !resp.Backorder || resp.IsSoldOut {
+		t.Fatalf("local auto stock must stay orderable without exposing a count: %+v", resp)
+	}
+	if len(resp.SKUs) != 2 {
+		t.Fatalf("expected two skus, got %d", len(resp.SKUs))
+	}
+	if resp.SKUs[0].StockStatus != constants.ProductStockStatusLowStock || resp.SKUs[0].StockDisplay != constants.ProductStockDisplayRange1To5 {
+		t.Fatalf("single card sku tier mismatch: %+v", resp.SKUs[0])
+	}
+	if resp.SKUs[1].StockStatus != constants.ProductStockStatusInStock || resp.SKUs[1].StockDisplay != constants.ProductStockDisplayRange6To20 {
+		t.Fatalf("mid card sku tier mismatch: %+v", resp.SKUs[1])
+	}
+
+	body, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatalf("marshal public product: %v", err)
+	}
+	assertNoPositivePublicStock(t, body)
+	if strings.Contains(string(body), `"auto_stock_available":1`) || strings.Contains(string(body), `"auto_stock_available":9`) {
+		t.Fatalf("public json still contains an exact auto stock count: %s", body)
+	}
+
+	hidden := *product
+	hidden.StockDisplayMode = constants.ProductStockDisplayHidden
+	hiddenResp, err := h.decoratePublicProduct(&hidden, nil)
+	if err != nil {
+		t.Fatalf("decorate hidden product: %v", err)
+	}
+	hiddenBody, err := json.Marshal(hiddenResp)
+	if err != nil {
+		t.Fatalf("marshal hidden product: %v", err)
+	}
+	assertNoPositivePublicStock(t, hiddenBody)
+	if hiddenResp.StockDisplay != constants.ProductStockDisplayHidden || !hiddenResp.StockQuantityHidden {
+		t.Fatalf("hidden mode metadata mismatch: %+v", hiddenResp)
+	}
+
+	empty := &productdomain.Product{
+		ID:               8,
+		FulfillmentType:  constants.FulfillmentTypeAuto,
+		StockDisplayMode: constants.ProductStockDisplayRange,
+		SKUs: []productdomain.ProductSKU{
+			{ID: 3, SKUCode: productdomain.DefaultSKUCode, IsActive: true, AutoStockAvailable: 0},
+		},
+	}
+	emptyResp, err := h.decoratePublicProduct(empty, nil)
+	if err != nil {
+		t.Fatalf("decorate empty product: %v", err)
+	}
+	if emptyResp.StockStatus != constants.ProductStockStatusOutOfStock || !emptyResp.Backorder || emptyResp.IsSoldOut {
+		t.Fatalf("zero local cards must stay presale, got status=%s backorder=%v soldout=%v", emptyResp.StockStatus, emptyResp.Backorder, emptyResp.IsSoldOut)
+	}
+	if emptyResp.AutoStockAvailable != 0 || emptyResp.SKUs[0].AutoStockAvailable != 0 {
+		t.Fatalf("zero stock changed value product=%d sku=%d", emptyResp.AutoStockAvailable, emptyResp.SKUs[0].AutoStockAvailable)
+	}
+
+	unlimited := &productdomain.Product{
+		ID:               9,
+		FulfillmentType:  constants.FulfillmentTypeManual,
+		StockDisplayMode: constants.ProductStockDisplayHidden,
+		SKUs: []productdomain.ProductSKU{
+			{ID: 4, SKUCode: productdomain.DefaultSKUCode, IsActive: true, ManualStockTotal: constants.ManualStockUnlimited},
+		},
+	}
+	unlimitedResp, err := h.decoratePublicProduct(unlimited, nil)
+	if err != nil {
+		t.Fatalf("decorate unlimited product: %v", err)
+	}
+	if unlimitedResp.ManualStockAvailable != constants.ManualStockUnlimited || unlimitedResp.SKUs[0].ManualStockTotal != constants.ManualStockUnlimited {
+		t.Fatalf("already unlimited stock must stay unlimited, product=%d sku=%d", unlimitedResp.ManualStockAvailable, unlimitedResp.SKUs[0].ManualStockTotal)
+	}
+	if unlimitedResp.StockStatus != constants.ProductStockStatusUnlimited {
+		t.Fatalf("unlimited status mismatch: %s", unlimitedResp.StockStatus)
+	}
+
+	exact := &productdomain.Product{
+		ID:               10,
+		FulfillmentType:  constants.FulfillmentTypeAuto,
+		StockDisplayMode: constants.ProductStockDisplayExact,
+		SKUs: []productdomain.ProductSKU{
+			{ID: 5, SKUCode: productdomain.DefaultSKUCode, IsActive: true, AutoStockAvailable: 1, AutoStockTotal: 6},
+		},
+	}
+	exactResp, err := h.decoratePublicProduct(exact, nil)
+	if err != nil {
+		t.Fatalf("decorate exact product: %v", err)
+	}
+	if exactResp.StockQuantityHidden || exactResp.AutoStockAvailable != 1 || exactResp.SKUs[0].AutoStockAvailable != 1 {
+		t.Fatalf("exact mode must keep the real count, product=%d sku=%d hidden=%v", exactResp.AutoStockAvailable, exactResp.SKUs[0].AutoStockAvailable, exactResp.StockQuantityHidden)
+	}
+	if exactResp.StockDisplay != constants.ProductStockDisplayExact || exactResp.SKUs[0].StockStatus != constants.ProductStockStatusLowStock {
+		t.Fatalf("exact display mismatch product=%s sku=%s", exactResp.StockDisplay, exactResp.SKUs[0].StockStatus)
+	}
+}
+
+func assertNoPositivePublicStock(t *testing.T, raw []byte) {
+	t.Helper()
+	var payload any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("decode public product: %v", err)
+	}
+	var walk func(any)
+	walk = func(node any) {
+		switch typed := node.(type) {
+		case map[string]any:
+			for key, value := range typed {
+				switch key {
+				case "auto_stock_available", "auto_stock_total", "auto_stock_locked", "auto_stock_sold",
+					"manual_stock_available", "manual_stock_total", "manual_stock_locked", "manual_stock_sold",
+					"upstream_stock", "stock_count":
+					number, ok := value.(float64)
+					if !ok {
+						t.Fatalf("%s is not a number: %#v", key, value)
+					}
+					if number > 0 {
+						t.Fatalf("%s leaked a positive quantity %v", key, number)
+					}
+				}
+				walk(value)
+			}
+		case []any:
+			for _, item := range typed {
+				walk(item)
+			}
+		}
+	}
+	walk(payload)
 }

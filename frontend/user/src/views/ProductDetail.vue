@@ -5,7 +5,7 @@
       <div v-if="loading" class="space-y-6" aria-hidden="true">
         <div class="h-5 w-48 rounded theme-skeleton"></div>
         <div class="grid gap-5 lg:grid-cols-12 lg:gap-6">
-          <div class="aspect-[4/3] rounded-[28px] theme-skeleton lg:col-span-7"></div>
+          <div class="aspect-square rounded-[28px] theme-skeleton lg:col-span-7"></div>
           <div class="theme-float space-y-5 rounded-[28px] bg-card p-6 md:p-8 lg:col-span-5">
             <div class="h-3 w-24 rounded theme-skeleton"></div>
             <div class="h-8 w-3/4 rounded theme-skeleton"></div>
@@ -55,14 +55,15 @@
                 <Lock v-else class="h-3 w-3" />
                 {{ getPurchaseTypeLabel(product.purchase_type) }}
               </Badge>
-              <Badge :variant="product.fulfillment_type === 'auto' ? 'info' : 'neutral'">
-                <Zap v-if="product.fulfillment_type === 'auto'" class="h-3 w-3" />
+              <Badge :variant="showsAutomaticDelivery(product) ? 'info' : 'neutral'">
+                <Zap v-if="showsAutomaticDelivery(product)" class="h-3 w-3" />
                 <Pencil v-else class="h-3 w-3" />
-                {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
+                {{ getFulfillmentTypeLabel(product) }}
               </Badge>
               <Badge :variant="getStockBadgeVariant(product.stock_status)">
                 {{ getStockStatusLabel(product) }}
               </Badge>
+              <p v-if="showPresaleNotice" class="basis-full text-xs font-medium text-warning">{{ t('products.presaleNotice') }}</p>
               <Badge v-for="(tag, index) in product.tags || []" :key="index" variant="neutral">{{ tag }}</Badge>
             </div>
 
@@ -312,7 +313,7 @@ const setupMobileBarObserver = () => {
 // 全部业务逻辑由 useProductDetail 提供（与 vault 模板共用，保证功能一致）
 const {
   getLocalizedText, siteCurrency, formatPrice,
-  getPurchaseTypeLabel, getFulfillmentTypeLabel, getStockBadgeVariant, getStockStatusLabel,
+  getPurchaseTypeLabel, getFulfillmentTypeLabel, showsAutomaticDelivery, getStockBadgeVariant, getStockStatusLabel,
   hasPromotionPrice, getPromotionPriceAmount, getPromotionSaveAmount,
   hasSkuPromotionPrice, getSkuPromotionSaveAmount,
   hasPromotionRules, getPromotionRules,
@@ -326,7 +327,7 @@ const {
   showSelectedSkuMemberBadge,
   isSkuPurchasable, skuDisplayText, skuStockText, skuStockBadgeClass,
   quantityEffectiveLimit, quantityEffectiveMin, handleQuantityInput,
-  requiresLogin, requiresSKUSelection, canPurchase, cannotPurchaseReason,
+  requiresLogin, requiresSKUSelection, canPurchase, cannotPurchaseReason, showPresaleNotice,
   categoryName, images,
   backToListTo,
   addToCart, buyNow, goLogin, loadProduct,

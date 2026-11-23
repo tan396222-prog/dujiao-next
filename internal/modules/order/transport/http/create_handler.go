@@ -3,12 +3,17 @@ package orderhttp
 import (
 	"context"
 	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
 
 	paymentpresenter "github.com/dujiao-next/internal/modules/payment/transport/presenter"
 
 	paymentdomain "github.com/dujiao-next/internal/modules/payment/domain"
 
 	orderdomain "github.com/dujiao-next/internal/modules/order/domain"
+	orderriskcontract "github.com/dujiao-next/internal/modules/orderrisk/contract"
 
 	"github.com/dujiao-next/internal/i18n"
 	captcha "github.com/dujiao-next/internal/modules/captcha/contract"
@@ -82,10 +87,18 @@ type CreateGuestOrderAndPayRequest struct {
 
 // CreateHandler 处理前台订单创建与 create-and-pay HTTP。
 type CreateHandler struct {
-	orders   OrderCreateService
-	payments PaymentChannelPolicy
-	captcha  GuestCreateCaptcha
-	pay      OrderPaymentCreator
+	orders       OrderCreateService
+	payments     PaymentChannelPolicy
+	captcha      GuestCreateCaptcha
+	pay          OrderPaymentCreator
+	protection   OrderProtection
+	deviceSecret string
+}
+
+// OrderProtection 只提供结账预检。它不能代替创建订单时的风控。
+type OrderProtection interface {
+	InspectOrderAttempt(clientIP string) (bool, int64)
+	AcceptProtectionSignal(subject, token, secret string, now time.Time) string
 }
 
 func NewCreateHandler(orders OrderCreateService, payments PaymentChannelPolicy, captcha GuestCreateCaptcha, pay OrderPaymentCreator) *CreateHandler {
@@ -93,6 +106,21 @@ func NewCreateHandler(orders OrderCreateService, payments PaymentChannelPolicy, 
 		panic("order create handler: orders is nil")
 	}
 	return &CreateHandler{orders: orders, payments: payments, captcha: captcha, pay: pay}
+}
+
+// UseDeviceSignal 使用应用密钥签发可选的下单辅助标记。密钥为空时不签发，下单仍然允许。
+func (h *CreateHandler) UseDeviceSignal(secret string) {
+	if h == nil {
+		return
+	}
+	h.deviceSecret = strings.TrimSpace(secret)
+}
+
+func (h *CreateHandler) UseOrderProtection(protection OrderProtection) {
+	if h == nil {
+		return
+	}
+	h.protection = protection
 }
 
 // CreateOrder 创建订单
@@ -116,6 +144,8 @@ func (h *CreateHandler) CreateOrder(c *gin.Context) {
 		AffiliateCode:       req.AffiliateCode,
 		AffiliateVisitorKey: req.AffiliateVisitorKey,
 		ClientIP:            c.ClientIP(),
+		DeviceSignal:        h.deviceSignal(c),
+		AutomationSignal:    h.protectionSignal(c),
 		ManualFormData:      req.ManualFormData,
 	})
 	if err != nil {
@@ -149,6 +179,8 @@ func (h *CreateHandler) CreateGuestOrder(c *gin.Context) {
 		AffiliateCode:       req.AffiliateCode,
 		AffiliateVisitorKey: req.AffiliateVisitorKey,
 		ClientIP:            c.ClientIP(),
+		DeviceSignal:        h.deviceSignal(c),
+		AutomationSignal:    h.protectionSignal(c),
 		ManualFormData:      req.ManualFormData,
 	})
 	if err != nil {
@@ -181,6 +213,8 @@ func (h *CreateHandler) CreateOrderAndPay(c *gin.Context) {
 		AffiliateCode:       req.AffiliateCode,
 		AffiliateVisitorKey: req.AffiliateVisitorKey,
 		ClientIP:            c.ClientIP(),
+		DeviceSignal:        h.deviceSignal(c),
+		AutomationSignal:    h.protectionSignal(c),
 		ManualFormData:      req.ManualFormData,
 	})
 	if err != nil {
@@ -223,6 +257,8 @@ func (h *CreateHandler) CreateGuestOrderAndPay(c *gin.Context) {
 		AffiliateCode:       req.AffiliateCode,
 		AffiliateVisitorKey: req.AffiliateVisitorKey,
 		ClientIP:            c.ClientIP(),
+		DeviceSignal:        h.deviceSignal(c),
+		AutomationSignal:    h.protectionSignal(c),
 		ManualFormData:      req.ManualFormData,
 	})
 	if err != nil {
@@ -241,6 +277,25 @@ func (h *CreateHandler) CreateGuestOrderAndPay(c *gin.Context) {
 	}
 
 	h.respondCreateAndPay(c, order, orderResp, req.ChannelID, false)
+}
+
+func (h *CreateHandler) deviceSignal(c *gin.Context) string {
+	if h == nil || c == nil || h.deviceSecret == "" {
+		return ""
+	}
+	if raw, err := c.Cookie(orderriskcontract.DeviceCookieName); err == nil {
+		if id, ok := orderriskcontract.VerifyDeviceToken(h.deviceSecret, raw, time.Now()); ok {
+			return id
+		}
+	}
+	token, id, err := orderriskcontract.IssueDeviceToken(h.deviceSecret, time.Now())
+	if err != nil {
+		return ""
+	}
+	secure := c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https")
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(orderriskcontract.DeviceCookieName, token, int(24*time.Hour/time.Second), "/", "", secure, true)
+	return id
 }
 
 func (h *CreateHandler) verifyGuestCreateCaptcha(c *gin.Context, payload captchahttp.CaptchaPayloadRequest) bool {
@@ -320,4 +375,89 @@ func (h *CreateHandler) respondCreateAndPay(c *gin.Context, order *orderdomain.O
 		resp["expires_at"] = result.Payment.ExpiredAt
 	}
 	response.Success(c, resp)
+}
+
+type protectionPrecheckRequest struct {
+	Bind      string   `json:"bind"`
+	Webdriver *bool    `json:"webdriver"`
+	Traces    []string `json:"traces"`
+}
+
+// PrecheckCheckout 在真正创建订单前做同源预检。它不计数、不锁券、不扣余额。
+func (h *CreateHandler) PrecheckCheckout(c *gin.Context) {
+	var req protectionPrecheckRequest
+	_ = c.ShouldBindJSON(&req)
+	traces := make([]string, 0, 4)
+	for _, trace := range req.Traces {
+		if len(traces) == 4 {
+			break
+		}
+		switch strings.ToLower(strings.TrimSpace(trace)) {
+		case "headless", "cdp", "electron":
+			traces = append(traces, strings.ToLower(strings.TrimSpace(trace)))
+		}
+	}
+	signal := orderriskcontract.ClassifyAutomation(req.Webdriver, traces)
+	banned := false
+	var retry int64
+	if h != nil && h.protection != nil {
+		banned, retry = h.protection.InspectOrderAttempt(c.ClientIP())
+	}
+	token := ""
+	if h != nil && h.deviceSecret != "" && !banned {
+		issued, err := orderriskcontract.IssueProtectionToken(h.deviceSecret, h.protectionSubject(c), req.Bind, signal, time.Now())
+		if err == nil {
+			token = issued
+		}
+	}
+	response.Success(c, gin.H{
+		"banned":              banned,
+		"retry_after_seconds": retry,
+		"signal":              signal,
+		"token":               token,
+	})
+}
+
+func (h *CreateHandler) protectionSubject(c *gin.Context) string {
+	if uid := optionalUserID(c); uid > 0 {
+		return fmt.Sprintf("user:%d", uid)
+	}
+	if id := h.deviceSignal(c); id != "" {
+		return "device:" + id
+	}
+	return "guest"
+}
+
+func optionalUserID(c *gin.Context) uint {
+	if c == nil {
+		return 0
+	}
+	value, exists := c.Get("user_id")
+	if !exists {
+		return 0
+	}
+	switch typed := value.(type) {
+	case uint:
+		return typed
+	case int:
+		if typed > 0 {
+			return uint(typed)
+		}
+	case float64:
+		if typed > 0 {
+			return uint(typed)
+		}
+	}
+	return 0
+}
+
+func (h *CreateHandler) protectionSignal(c *gin.Context) string {
+	if h == nil || h.protection == nil || h.deviceSecret == "" {
+		return ""
+	}
+	token := strings.TrimSpace(c.GetHeader("X-DJ-Protection"))
+	if token == "" {
+		return ""
+	}
+	return h.protection.AcceptProtectionSignal(h.protectionSubject(c), token, h.deviceSecret, time.Now())
 }

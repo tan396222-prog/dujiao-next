@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 
+	refundapp "github.com/dujiao-next/internal/modules/order/application/refund"
 	orderdomain "github.com/dujiao-next/internal/modules/order/domain"
 
 	walletdomain "github.com/dujiao-next/internal/modules/wallet/domain"
@@ -227,6 +228,8 @@ func (h *AdminRefundHandler) AdminRefundOrderToWallet(c *gin.Context) {
 			ginutil.RespondError(c, response.CodeBadRequest, "error.order_status_invalid", nil)
 		case errors.Is(err, ErrOrderRefundExpired):
 			ginutil.RespondError(c, response.CodeBadRequest, "error.order_refund_expired", nil)
+		case errors.Is(err, refundapp.ErrCouponSaleBenefitConsumed):
+			ginutil.RespondError(c, response.CodeBadRequest, "error.coupon_sale_refund_blocked", nil)
 		case errors.Is(err, ErrWalletInvalidAmount), errors.Is(err, ErrWalletRefundExceeded), errors.Is(err, ErrWalletNotSupportedForGuest):
 			ginutil.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
 		default:
@@ -277,6 +280,8 @@ func (h *AdminRefundHandler) AdminManualRefundOrder(c *gin.Context) {
 			ginutil.RespondError(c, response.CodeBadRequest, "error.order_status_invalid", nil)
 		case errors.Is(err, ErrOrderRefundExpired):
 			ginutil.RespondError(c, response.CodeBadRequest, "error.order_refund_expired", nil)
+		case errors.Is(err, refundapp.ErrCouponSaleBenefitConsumed):
+			ginutil.RespondError(c, response.CodeBadRequest, "error.coupon_sale_refund_blocked", nil)
 		case errors.Is(err, ErrWalletInvalidAmount), errors.Is(err, ErrWalletRefundExceeded):
 			ginutil.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
 		default:

@@ -89,6 +89,7 @@ func (h *UserHandler) GetCart(c *gin.Context) {
 			MinPurchaseQuantity: item.Product.MinPurchaseQuantity,
 			MaxPurchaseQuantity: item.Product.MaxPurchaseQuantity,
 			FulfillmentType:     productFT,
+			CouponSale:          item.Product.CouponSale,
 			IsActive:            item.Product.IsActive,
 		}
 		respItems = append(respItems, cartpresenter.CartItemResp{

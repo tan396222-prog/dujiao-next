@@ -45,6 +45,7 @@ type adminSiteConfigRequest struct {
 	SiteName     string                                   `json:"site_name"`
 	Logo         string                                   `json:"logo"`
 	Favicon      string                                   `json:"favicon"`
+	Wallpaper    string                                   `json:"wallpaper"`
 	Announcement resellermodule.ResellerAnnouncementInput `json:"announcement"`
 	Support      resellermodule.ResellerSupportInput      `json:"support"`
 	SEO          resellermodule.ResellerSEOInput          `json:"seo"`
@@ -57,6 +58,7 @@ func (req adminSiteConfigRequest) toInput() resellermodule.ResellerSiteConfigInp
 		SiteName:     req.SiteName,
 		Logo:         req.Logo,
 		Favicon:      req.Favicon,
+		Wallpaper:    req.Wallpaper,
 		Announcement: req.Announcement,
 		Support:      req.Support,
 		SEO:          req.SEO,
@@ -135,7 +137,7 @@ func (h *AdminSiteConfigHandler) UpdateSiteConfig(c *gin.Context) {
 		"reseller_id":    resellerID,
 		"config_id":      row.ID,
 		"site_name":      row.SiteName,
-		"changed_fields": []string{"site_name", "logo", "favicon", "announcement", "support", "seo", "footer_links", "nav_config"},
+		"changed_fields": []string{"site_name", "logo", "favicon", "wallpaper", "announcement", "support", "seo", "footer_links", "nav_config"},
 		"source":         "admin",
 	})
 	response.Success(c, dto.NewAdminResellerSiteConfigResp(row))

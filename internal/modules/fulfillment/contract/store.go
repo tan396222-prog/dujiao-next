@@ -5,6 +5,7 @@ import fulfillmentdomain "github.com/dujiao-next/internal/modules/fulfillment/do
 // Store 是交付记录持久化端口。
 type Store interface {
 	Create(fulfillment *fulfillmentdomain.Fulfillment) error
+	Update(fulfillment *fulfillmentdomain.Fulfillment) error
 	GetByOrderID(orderID uint) (*fulfillmentdomain.Fulfillment, error)
 	FindByOrderIDForUpdate(orderID uint) (*fulfillmentdomain.Fulfillment, bool, error)
 }

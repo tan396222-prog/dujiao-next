@@ -9,21 +9,24 @@ import { fulfillmentTypeLabel } from '../utils/fulfillment'
 import { debounceAsync } from '../utils/debounce'
 import { copyText } from '../utils/clipboard'
 import { amountToCents, centsToAmount } from '../utils/money'
+import { protectionHeaders, requestProtection } from '../utils/paymentProtection'
 import { buildSkuDisplayTextFromSnapshot } from '../utils/sku'
 import {
   getCachedPaymentRestorePolicy,
   getPaymentResetPolicy,
   isCustomerSurchargePayment,
+  openResolvedPaymentLink,
   resolvePaymentInteractionLabelKey,
-  resolvePaymentLinkNavigationTarget,
   resolvePaymentPresentationMode,
   resolvePaymentResultTitleKey,
   shouldAutoOpenPaymentLink,
   type PaymentResetReason,
 } from '../utils/paymentResumePolicy'
+import { forgetPlacedCheckoutOrder } from '../utils/checkoutOrderResume'
 import QRCode from 'qrcode'
 import { type PageAlert } from '../utils/alerts'
 import { loadGuestOrderAuth, saveGuestOrderAuth } from '../utils/guestOrderAuth'
+import { planPaymentBootstrap, resolvePaymentPageView, settlePaymentOrderLoad } from '../utils/paymentPageState'
 
 /**
  * 支付页共享逻辑（classic + vault 双模板共用）。
@@ -38,6 +41,10 @@ export function usePayment() {
 
   const loading = ref(true)
   const submitting = ref(false)
+  const protectionOpen = ref(false)
+  const protectionStep = ref(1)
+  const protectionError = ref('')
+  let protectionController: AbortController | null = null
   const order = ref<any>(null)
   const paymentResult = ref<any>(null)
   const error = ref('')
@@ -125,7 +132,13 @@ export function usePayment() {
   })
   const backLink = computed(() => (isGuest.value ? '/guest/orders' : '/me/orders'))
   const hasGuestAuth = computed(() => Boolean(guestAuth.value.email && guestAuth.value.order_password))
-  const showGuestAuthForm = computed(() => isGuest.value && (!hasGuestAuth.value || guestAuthError.value))
+  const paymentPageView = computed(() => resolvePaymentPageView({
+    loading: loading.value,
+    isGuest: isGuest.value,
+    hasGuestAuth: hasGuestAuth.value,
+    guestAuthError: guestAuthError.value,
+    order: order.value,
+  }))
   const walletOnlyPayment = computed(() => !!appStore.config?.wallet_only_payment)
   const showBalanceOption = computed(() => !isGuest.value)
 
@@ -313,6 +326,7 @@ export function usePayment() {
     } catch (err) {
       if (currentVersion !== qrRenderVersion.value) return
       qrImageUrl.value = ''
+      error.value = t('payment.qrFailed')
     }
   }
 
@@ -579,8 +593,26 @@ export function usePayment() {
     }
   }
 
+  const releasePlacedCheckoutOrder = () => {
+    if (typeof sessionStorage === 'undefined') return
+    forgetPlacedCheckoutOrder(sessionStorage, String(orderNoQuery.value || order.value?.order_no || ''))
+  }
+
+  const applySettledOrderLoad = (failed: boolean) => {
+    const settled = settlePaymentOrderLoad({
+      isGuest: isGuest.value,
+      hasGuestAuth: hasGuestAuth.value,
+      failed,
+      order: order.value,
+    })
+    guestAuthError.value = settled.guestAuthErrorKey ? t(settled.guestAuthErrorKey) : ''
+    loading.value = false
+    return settled
+  }
+
   const loadOrder = async (options?: { silent?: boolean }) => {
     const silent = options?.silent && !!order.value
+    let failed = false
     if (!silent) {
       loading.value = true
     }
@@ -588,7 +620,6 @@ export function usePayment() {
       if (isGuest.value) {
         if (!hasGuestAuth.value) {
           order.value = null
-          guestAuthError.value = t('payment.guestAuthRequired')
           return
         }
         if (!orderNoQuery.value) {
@@ -602,7 +633,6 @@ export function usePayment() {
           order_password: guestAuth.value.order_password,
         }, { silentBusinessError: true })
         order.value = response.data.data
-        guestAuthError.value = ''
       } else {
         if (!orderNoQuery.value) {
           order.value = null
@@ -615,16 +645,17 @@ export function usePayment() {
       }
     } catch (err) {
       if (!silent) {
+        failed = true
         order.value = null
         orderPaymentChannels.value = []
         orderPaymentChannelsLoaded.value = false
-        if (isGuest.value) {
-          guestAuthError.value = t('payment.guestAuthInvalid')
-        }
       }
     } finally {
       try {
         if (order.value) {
+          if (orderCanceled.value || orderExpired.value || order.value.status !== 'pending_payment') {
+            releasePlacedCheckoutOrder()
+          }
           if (orderCanceled.value) {
             if (!silent) {
               error.value = t('payment.orderCanceled')
@@ -646,7 +677,7 @@ export function usePayment() {
         }
       } finally {
         if (!silent) {
-          loading.value = false
+          applySettledOrderLoad(failed)
         }
       }
     }
@@ -756,24 +787,32 @@ export function usePayment() {
   }
 
   const openPayLinkInCompatibleWindow = (automatic = false) => {
-    if (!payLink.value) return
-    if (isTelegramMiniApp.value) {
-      telegramMiniAppStore.openLink(payLink.value)
-    } else if (resolvePaymentLinkNavigationTarget(automatic) === 'current-tab') {
-      // 支付请求返回后已脱离原始点击事件，浏览器通常会拦截此时创建的新窗口。
-      // 自动收银台跳转使用当前标签页，既可靠也能保留当前 sessionStorage。
-      window.location.assign(payLink.value)
-      return
-    } else {
+    const result = openResolvedPaymentLink({
+      url: payLink.value,
+      automatic,
+      telegram: isTelegramMiniApp.value,
+      openTelegram: (url) => {
+        telegramMiniAppStore.openLink(url)
+      },
+      assign: (url) => {
+        window.location.assign(url)
+      },
       // 先创建同源空白页，让浏览器按规范复制当前标签页的 sessionStorage；
-      // 随后立即切断 opener 再跳转到支付站。这样第三方回跳仍能恢复游客订单，
-      // 同时不给外部收银台保留反向控制原页面的能力。
-      const paymentWindow = window.open('', '_blank')
-      if (!paymentWindow) return
-      paymentWindow.opener = null
-      paymentWindow.location.replace(payLink.value)
+      // 随后立即切断 opener 再跳转到支付站。自动跳转不走这里，避免弹窗被拦截后页面空白。
+      openWindow: (url) => {
+        const paymentWindow = window.open('', '_blank')
+        if (!paymentWindow) return false
+        paymentWindow.opener = null
+        paymentWindow.location.replace(url)
+        return true
+      },
+    })
+    if (result === 'opened') {
+      openedPayWindow.value = true
+      return
     }
-    openedPayWindow.value = true
+    openedPayWindow.value = false
+    error.value = result === 'blocked' ? t('payment.payLinkBlocked') : t('payment.payLinkRejected')
   }
 
   const handleOpenPayLink = () => {
@@ -982,7 +1021,24 @@ export function usePayment() {
       return
     }
     submitting.value = true
+    protectionOpen.value = true
+    protectionError.value = ''
+    protectionStep.value = 1
+    protectionController = new AbortController()
     try {
+      protectionStep.value = 2
+      const precheck = await requestProtection({
+        authenticated: !isGuest.value,
+        bind: 'payment',
+        signal: protectionController.signal,
+      })
+      if (precheck.banned) {
+        protectionError.value = t('paymentProtection.limited')
+        error.value = protectionError.value
+        return
+      }
+      const requestOptions = { headers: protectionHeaders(precheck.token), signal: protectionController.signal }
+      protectionStep.value = 3
       if (isGuest.value) {
         if (!hasGuestAuth.value) {
           error.value = t('payment.guestAuthRequired')
@@ -993,7 +1049,7 @@ export function usePayment() {
           order_password: guestAuth.value.order_password,
           order_no: orderNoResolved.value,
           channel_id: selectedChannelId.value,
-        })
+        }, requestOptions)
         paymentResult.value = response.data.data
         if (paymentResult.value?.pay_url || paymentResult.value?.qr_code) {
           cachedPayment.value = paymentResult.value
@@ -1009,7 +1065,7 @@ export function usePayment() {
         if (requiresOnlineChannel.value && selectedChannelId.value) {
           payload.channel_id = selectedChannelId.value
         }
-        const response = await paymentAPI.create(payload)
+        const response = await paymentAPI.create(payload, requestOptions)
         const created = response.data.data || {}
         if (created.order_paid && !created.payment_id) {
           paymentResult.value = null
@@ -1034,15 +1090,32 @@ export function usePayment() {
         void captureCurrentPayment({ silent: true })
         await loadWallet()
       }
+      protectionStep.value = 4
       window.scrollTo({ top: 0, behavior: 'smooth' })
       if (shouldAutoOpenPaymentLink(paymentResult.value)) {
         openPayLinkInCompatibleWindow(true)
       }
+      protectionOpen.value = false
     } catch (err: any) {
+      if (protectionController?.signal.aborted) return
       error.value = err.message || t('payment.createFailed')
+      protectionError.value = error.value
     } finally {
       submitting.value = false
+      if (!protectionError.value) protectionOpen.value = false
     }
+  }
+
+  const cancelProtection = () => {
+    protectionController?.abort()
+    protectionOpen.value = false
+    protectionError.value = ''
+    submitting.value = false
+  }
+
+  const retryProtection = () => {
+    protectionError.value = ''
+    void performPayment()
   }
 
   const handlePayment = debounceAsync(performPayment, 200)
@@ -1219,16 +1292,35 @@ export function usePayment() {
   }
 
   onMounted(() => {
-    if (isRechargeReturn.value && rechargeNoQuery.value) {
-      void redirectToWalletRecharge()
-      return
-    }
-    if (!orderNoQuery.value) return
-    guestAuth.value = loadGuestOrderAuth()
-    loadOrder()
-    void loadWallet()
-    if (!appStore.config || !Array.isArray(appStore.config?.payment_channels)) {
-      appStore.loadConfig(true)
+    try {
+      const plan = planPaymentBootstrap({
+        rechargeReturn: isRechargeReturn.value && rechargeNoQuery.value !== '',
+        orderNo: orderNoQuery.value,
+      })
+      if (plan === 'recharge') {
+        loading.value = false
+        void redirectToWalletRecharge()
+        return
+      }
+      guestAuth.value = loadGuestOrderAuth()
+      if (plan === 'missing-order') {
+        order.value = null
+        orderPaymentChannels.value = []
+        orderPaymentChannelsLoaded.value = false
+        applySettledOrderLoad(false)
+        return
+      }
+      void loadOrder().catch((err: any) => {
+        loading.value = false
+        error.value = err?.message || t('payment.createFailed')
+      })
+      void loadWallet()
+      if (!appStore.config || !Array.isArray(appStore.config?.payment_channels)) {
+        appStore.loadConfig(true)
+      }
+    } catch (err: any) {
+      loading.value = false
+      error.value = err?.message || t('payment.createFailed')
     }
   })
 
@@ -1260,7 +1352,12 @@ export function usePayment() {
     async ([, orderNo], [, previousOrderNo]) => {
       if (!previousOrderNo || orderNo === previousOrderNo) return
       resetPaymentRouteState()
-      if (!orderNo) return
+      if (!orderNo) {
+        guestAuth.value = loadGuestOrderAuth()
+        order.value = null
+        applySettledOrderLoad(false)
+        return
+      }
       await loadOrder()
       void loadWallet()
     }
@@ -1311,6 +1408,7 @@ export function usePayment() {
   })
 
   onUnmounted(() => {
+    protectionController?.abort()
     stopPolling()
     stopCountdown()
     if (redirectTimer.value) {
@@ -1369,7 +1467,7 @@ export function usePayment() {
     useBalance,
     // routing / flags
     backLink,
-    showGuestAuthForm,
+    paymentPageView,
     walletOnlyPayment,
     showBalanceOption,
     configReady,
@@ -1434,6 +1532,12 @@ export function usePayment() {
     restoreCachedPayment,
     handleChangePaymentMethod,
     handlePayment,
+    protectionOpen,
+    protectionStep,
+    protectionTotal: 4,
+    protectionError,
+    cancelProtection,
+    retryProtection,
     handleGuestAuthSubmit,
     handleRefresh,
   }

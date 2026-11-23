@@ -107,6 +107,7 @@
                         <div v-if="orderItemSkuText(item)" class="text-xs text-muted-foreground mt-1">{{ t('orderDetail.itemSkuLabel') }}：{{ orderItemSkuText(item) }}</div>
                         <div class="text-xs text-muted-foreground mt-1">
                           {{ t('orderDetail.itemFulfillmentLabel') }}：{{ fulfillmentTypeLabelText(item.fulfillment_type) }}
+                          <div v-if="item.sku_snapshot && item.sku_snapshot.presale === true && child.fulfillment?.status !== 'delivered'" class="text-warning">{{ t('orderDetail.presalePending') }}</div>
                         </div>
                         <div v-if="item.tags && item.tags.length" class="mt-2 flex flex-wrap gap-2">
                           <Badge v-for="(tag, index) in item.tags" :key="index" variant="neutral" size="sm" class="rounded-full">{{ tag }}</Badge>
@@ -281,6 +282,7 @@
                   <div v-if="orderItemSkuText(item)" class="text-xs text-muted-foreground mt-1">{{ t('orderDetail.itemSkuLabel') }}：{{ orderItemSkuText(item) }}</div>
                   <div class="text-xs text-muted-foreground mt-1">
                     {{ t('orderDetail.itemFulfillmentLabel') }}：{{ fulfillmentTypeLabelText(item.fulfillment_type) }}
+                    <div v-if="item.sku_snapshot && item.sku_snapshot.presale === true && order.fulfillment?.status !== 'delivered'" class="text-warning">{{ t('orderDetail.presalePending') }}</div>
                   </div>
                   <div v-if="item.tags && item.tags.length" class="mt-2 flex flex-wrap gap-2">
                     <Badge v-for="(tag, index) in item.tags" :key="index" variant="neutral" size="sm" class="rounded-full">{{ tag }}</Badge>

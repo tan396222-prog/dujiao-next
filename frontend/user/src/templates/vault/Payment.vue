@@ -1,5 +1,6 @@
 <template>
   <div class="mx-auto w-full max-w-[1180px] px-6 pb-8">
+    <PaymentProtectionDialog :open="protectionOpen" :step="protectionStep" :total="protectionTotal" :error="protectionError" @cancel="cancelProtection" @retry="retryProtection" />
     <div class="my-5 flex items-start justify-between gap-4">
       <div>
         <h1 class="mb-1.5 text-[32px] font-extrabold">{{ t('payment.title') }}</h1>
@@ -11,13 +12,13 @@
     <VaultCheckoutSteps current="payment" />
 
     <!-- Loading -->
-    <div v-if="loading" class="mb-[18px] rounded-xl border bg-card p-[22px]">
+    <div v-if="paymentPageView === 'loading'" class="mb-[18px] rounded-xl border bg-card p-[22px]">
       <div class="mb-4 h-5 w-[40%] rounded bg-secondary"></div>
       <div class="h-[180px] rounded-md bg-secondary"></div>
     </div>
 
     <!-- 游客验证 -->
-    <div v-else-if="showGuestAuthForm" class="mb-[18px] rounded-xl border bg-card p-[22px]">
+    <div v-else-if="paymentPageView === 'guest-form'" class="mb-[18px] rounded-xl border bg-card p-[22px]">
       <h2 class="mb-1.5 text-lg font-bold">{{ t('payment.guestAuthTitle') }}</h2>
       <p class="mb-3.5 text-[13px] text-muted-foreground">{{ t('payment.guestAuthHint') }}</p>
       <div class="grid gap-3 sm:grid-cols-2">
@@ -29,7 +30,7 @@
     </div>
 
     <!-- 订单不存在 -->
-    <div v-else-if="!order" class="my-8 flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center text-muted-foreground">
+    <div v-else-if="paymentPageView === 'empty'" class="my-8 flex flex-col items-center gap-3 rounded-xl border border-dashed py-16 text-center text-muted-foreground">
       <AlertCircle class="h-10 w-10 opacity-60" />
       <p>{{ t('payment.orderNotFound') }}</p>
       <Button as-child class="mt-2 rounded-full" size="sm"><RouterLink :to="backLink">{{ t('payment.backToOrders') }}</RouterLink></Button>
@@ -49,6 +50,8 @@
         </div>
       </div>
 
+      <div v-if="paymentAlert" class="mt-4 rounded-sm px-3 py-2.5 text-[13px] font-semibold" :class="paymentAlert.level === 'error' ? 'bg-destructive/10 text-destructive' : (paymentAlert.level === 'success' ? 'bg-[color:var(--teal-soft)] text-[color:var(--teal-strong)]' : 'bg-warning/10 text-warning')">{{ paymentAlert.message }}</div>
+
       <div class="mt-5 grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div>
           <!-- QR -->
@@ -56,6 +59,10 @@
             <div class="mb-3 text-[13px] text-muted-foreground">{{ paymentGuideTitle }}</div>
             <div class="aspect-square w-full max-w-[240px] overflow-hidden rounded-md bg-white p-2"><img :src="qrImageUrl" alt="QR Code" class="h-full w-full object-contain" /></div>
             <div v-if="qrUsingPayLinkFallback" class="mt-2.5 text-xs text-muted-foreground">{{ t('payment.qrFallbackHint') }}</div>
+            <div v-if="showPayLink" class="mt-3 flex flex-wrap items-center justify-center gap-2">
+              <Button size="sm" class="rounded-full" @click="handleOpenPayLink">{{ t('payment.openPayLink') }}</Button>
+              <Button variant="outline" size="sm" class="rounded-full" @click="handleCopyPayLink">{{ t('payment.copyPayLink') }}</Button>
+            </div>
             <div v-if="hasCryptoPaymentDetails" class="mt-4 grid w-full gap-2 rounded-md border p-3 text-left">
               <div v-for="item in cryptoPaymentDetails" :key="item.key" class="flex justify-between gap-3 border-b pb-1.5 last:border-b-0 last:pb-0">
                 <span class="flex-none text-xs text-muted-foreground">{{ item.label }}</span>
@@ -258,13 +265,14 @@ import PaymentAmountBreakdown from '../../components/payment/PaymentAmountBreakd
 import PaymentChannelSelector from '../../components/payment/PaymentChannelSelector.vue'
 import VaultCheckoutSteps from './components/VaultCheckoutSteps.vue'
 import { usePayment } from '../../composables/usePayment'
+import PaymentProtectionDialog from '../../components/payment/PaymentProtectionDialog.vue'
 
 const { t } = useI18n()
 
 const {
   loading, submitting, order, paymentResult, selectedChannelId, copied, walletAddressCopied,
   openedPayWindow, cachedPayment, guestAuth, guestAuthError, walletLoading, useBalance,
-  backLink, showGuestAuthForm, walletOnlyPayment, showBalanceOption, configReady, channels,
+  backLink, paymentPageView, walletOnlyPayment, showBalanceOption, configReady, channels,
   selectedChannel, selectedChannelName, cachedChannelName, resultChannelName, interactionLabel,
   paymentResultTitle, paymentGuideTitle, paymentGuideTip, showPayLink, showTelegramPayHint, payLinkOpenedTip,
   cryptoWalletAddress, cryptoPaymentDetails, hasCryptoPaymentDetails, qrUsingPayLinkFallback, showQRCode, qrImageUrl,
@@ -274,6 +282,6 @@ const {
   paymentWalletPaidDisplay, paymentOnlinePayDisplay, isChannelDisabledForAmount, channelAmountLimitHint, canSubmitPayment,
   formatDate, statusLabel, formatMoney, hasDiscountAmount, formatDiscountMoney, getLocalizedText, orderItemSkuText, fulfillmentTypeLabelText,
   handleCopyPayLink, handleCopyWalletAddress, handleOpenPayLink, restoreCachedPayment, handleChangePaymentMethod,
-  handlePayment, handleGuestAuthSubmit, handleRefresh,
+  handlePayment, protectionOpen, protectionStep, protectionTotal, protectionError, cancelProtection, retryProtection, handleGuestAuthSubmit, handleRefresh,
 } = usePayment()
 </script>

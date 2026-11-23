@@ -12,7 +12,7 @@
         <div class="mb-7 text-center">
           <p class="text-[11px] font-bold uppercase tracking-[0.2em] text-primary">{{ brandSiteName }}</p>
           <h1 class="mt-3 text-3xl font-extrabold">{{ step === 'totp' ? t('auth.login.totp.title') : t('auth.login.title') }}</h1>
-          <p class="mt-2 text-sm text-muted-foreground">{{ step === 'totp' ? t('auth.login.totp.subtitle') : t('auth.login.subtitle') }}</p>
+          <p class="mt-2 text-sm text-muted-foreground">{{ step === 'totp' ? t('auth.login.totp.subtitle') : (loginMode === 'email_code' ? t('auth.login.emailCodeSubtitle') : t('auth.login.subtitle')) }}</p>
         </div>
 
         <!-- 2FA -->
@@ -55,6 +55,10 @@
 
         <!-- 密码登录 -->
         <form v-else class="grid gap-[18px]" @submit.prevent="handleLogin">
+          <div class="grid grid-cols-2 gap-1 rounded-full bg-secondary p-1" data-login-mode-switch>
+            <button type="button" class="rounded-full px-3 py-2 text-sm font-semibold" :class="loginMode === 'password' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'" :aria-pressed="loginMode === 'password'" @click="loginMode = 'password'">{{ t('auth.login.modePassword') }}</button>
+            <button type="button" class="rounded-full px-3 py-2 text-sm font-semibold" :class="loginMode === 'email_code' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground'" :aria-pressed="loginMode === 'email_code'" data-login-mode-email-code @click="loginMode = 'email_code'">{{ t('auth.login.modeEmailCode') }}</button>
+          </div>
           <FormField :label="t('auth.login.emailLabel')" :error="formValidation.getError('email')">
             <template #icon><Mail class="h-3.5 w-3.5" aria-hidden="true" /></template>
             <template #default="{ id, hasError, describedBy }">
@@ -73,7 +77,7 @@
             </template>
           </FormField>
 
-          <FormField :label="t('auth.login.passwordLabel')" :error="formValidation.getError('password')">
+          <FormField v-if="loginMode === 'password'" :label="t('auth.login.passwordLabel')" :error="formValidation.getError('password')">
             <template #icon><Lock class="h-3.5 w-3.5" aria-hidden="true" /></template>
             <template #default="{ id, hasError, describedBy }">
               <div class="relative">
@@ -100,6 +104,18 @@
               </div>
             </template>
           </FormField>
+
+          <FormField v-else :label="t('auth.login.emailCodeLabel')">
+            <template #default="{ id }">
+              <div class="flex gap-2">
+                <Input :id="id" v-model="emailCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" class="h-11" :placeholder="t('auth.login.emailCodePlaceholder')" />
+                <Button type="button" variant="outline" class="h-11 shrink-0" :disabled="emailCodeCountdown > 0 || userAuthStore.loading" @click="sendLoginEmailCode">
+                  {{ emailCodeCountdown > 0 ? t('auth.login.emailCodeCountdown', { seconds: emailCodeCountdown }) : t('auth.login.sendEmailCode') }}
+                </Button>
+              </div>
+            </template>
+          </FormField>
+          <p v-if="loginMode === 'email_code'" class="-mt-2 text-xs text-muted-foreground">{{ t('auth.login.emailCodeHint') }}</p>
 
           <div v-if="loginCaptchaEnabled">
             <label class="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
@@ -139,7 +155,7 @@
 
           <Button type="submit" :disabled="userAuthStore.loading" class="h-11 w-full rounded-full font-bold">
             <LogIn v-if="!userAuthStore.loading" class="h-4 w-4" />
-            {{ userAuthStore.loading ? t('auth.login.submitting') : t('auth.login.submit') }}
+            {{ userAuthStore.loading ? t('auth.login.submitting') : (loginMode === 'email_code' ? t('auth.login.emailCodeSubmit') : t('auth.login.submit')) }}
           </Button>
 
           <!-- Third-party sign-in -->
@@ -211,7 +227,7 @@ const { t } = useI18n()
 
 const {
   userAuthStore, brandSiteName,
-  email, password, showPassword, rememberMe,
+  email, password, showPassword, rememberMe, loginMode, emailCode, emailCodeCountdown, sendLoginEmailCode,
   step, totpMode, totpCode, recoveryCode, challengeRemainingSeconds, handleVerify2FA, cancel2FA,
   error, info, formValidation,
   loginCaptchaEnabled, captchaProvider, captchaPayload, turnstileToken, turnstileSiteKey,

@@ -44,6 +44,8 @@ var (
 	ErrQueueUnavailable                    = errors.New("queue unavailable")
 	ErrPaymentUnderpaidCredited            = errors.New("payment underpaid already credited to wallet")
 	ErrPaymentCanceledOrderUnderpaid       = errors.New("canceled order payment does not cover total")
+	ErrPaymentProviderRefRequired          = errors.New("payment provider reference required")
+	ErrPaymentProviderRefRejected          = errors.New("payment provider reference already used")
 )
 
 // PaymentService 支付服务

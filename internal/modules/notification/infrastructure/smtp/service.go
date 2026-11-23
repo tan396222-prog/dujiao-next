@@ -288,6 +288,9 @@ func buildVerifyCodeContent(code, purpose, locale string, brands ...mailbrand.Br
 		case constants.VerifyPurposeReset:
 			subject = "重置密碼驗證碼"
 			purposeText = "重置密碼"
+		case constants.VerifyPurposeLogin:
+			subject = "登入驗證碼"
+			purposeText = "登入"
 		case constants.VerifyPurposeTelegramBind:
 			subject = "Telegram 綁定驗證碼"
 			purposeText = "綁定 Telegram"
@@ -307,6 +310,9 @@ func buildVerifyCodeContent(code, purpose, locale string, brands ...mailbrand.Br
 		case constants.VerifyPurposeReset:
 			subject = "Password Reset Code"
 			purposeText = "password reset"
+		case constants.VerifyPurposeLogin:
+			subject = "Sign-in Code"
+			purposeText = "sign-in"
 		case constants.VerifyPurposeTelegramBind:
 			subject = "Telegram Binding Code"
 			purposeText = "binding Telegram"
@@ -326,6 +332,9 @@ func buildVerifyCodeContent(code, purpose, locale string, brands ...mailbrand.Br
 		case constants.VerifyPurposeReset:
 			subject = "重置密码验证码"
 			purposeText = "重置密码"
+		case constants.VerifyPurposeLogin:
+			subject = "登录验证码"
+			purposeText = "登录"
 		case constants.VerifyPurposeTelegramBind:
 			subject = "Telegram 绑定验证码"
 			purposeText = "绑定 Telegram"

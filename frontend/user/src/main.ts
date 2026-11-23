@@ -2,14 +2,20 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { createHead } from '@unhead/vue/client'
 import './style.css'
+import './styles/crystal-glass.css'
 import App from './App.vue'
 import router, { warmupCommonRoutes } from './router'
 import i18n, { detectLocale, setI18nLocale, warmupLocaleMessages } from './i18n'
 import { useTelegramMiniAppStore } from './stores/telegramMiniApp'
 import { initTemplateOverride } from './templates/registry'
+import { initStorefrontSkin } from './utils/storefrontSkin'
+import { bindCrystalMotion } from './utils/crystalMotion'
 
 // 预览用：?template=vault 持久化激活模板（站长正式切换走站点配置）
 initTemplateOverride()
+// 顾客端默认浅紫水晶玻璃；?skin=classic 回到原主题
+initStorefrontSkin()
+bindCrystalMotion()
 
 const brandLog = (globalThis as any).console?.log?.bind(console)
 brandLog?.(
@@ -39,4 +45,7 @@ Promise.all([
 void router.isReady().then(() => {
     warmupCommonRoutes()
     warmupLocaleMessages()
+}).finally(() => {
+    // 首屏开场由 index.html 播完约 3 秒再淡出。这里只通知配置和路由已经结束，不提前拆掉开场。
+    window.dispatchEvent(new Event('dj-storefront-ready'))
 })

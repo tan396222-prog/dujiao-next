@@ -13,7 +13,6 @@ import (
 	"github.com/dujiao-next/internal/platform/http/response"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shopspring/decimal"
 )
 
 // Service 是前台推广返利端口。
@@ -143,45 +142,12 @@ func (h *Handler) ListAffiliateWithdraws(c *gin.Context) {
 	response.SuccessWithPage(c, affiliatepresenter.NewWithdrawList(rows), response.BuildPagination(page, pageSize, total))
 }
 
-// ApplyAffiliateWithdraw 提交提现申请
+// ApplyAffiliateWithdraw 拒绝新的提现申请。请求体里的用户、金额和账号一律不采用。
 func (h *Handler) ApplyAffiliateWithdraw(c *gin.Context) {
 	uid, ok := ginutil.GetUserID(c)
 	if !ok {
 		return
 	}
-
-	var req withdrawApplyRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		ginutil.RespondBindError(c, err)
-		return
-	}
-	amount, err := decimal.NewFromString(strings.TrimSpace(req.Amount))
-	if err != nil {
-		ginutil.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
-		return
-	}
-
-	row, err := h.svc.ApplyWithdraw(uid, affiliateapp.WithdrawApplyInput{
-		Amount:  amount,
-		Channel: req.Channel,
-		Account: req.Account,
-	})
-	if err != nil {
-		switch {
-		case errors.Is(err, affiliateapp.ErrDisabled):
-			ginutil.RespondError(c, response.CodeBadRequest, "error.forbidden", nil)
-		case errors.Is(err, affiliateapp.ErrNotOpened):
-			ginutil.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
-		case errors.Is(err, affiliateapp.ErrWithdrawAmountInvalid):
-			ginutil.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
-		case errors.Is(err, affiliateapp.ErrWithdrawChannelInvalid):
-			ginutil.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
-		case errors.Is(err, affiliateapp.ErrWithdrawInsufficient):
-			ginutil.RespondError(c, response.CodeBadRequest, "error.bad_request", nil)
-		default:
-			ginutil.RespondError(c, response.CodeInternal, "error.save_failed", err)
-		}
-		return
-	}
-	response.Success(c, affiliatepresenter.NewWithdraw(row))
+	_, err := h.svc.ApplyWithdraw(uid, affiliateapp.WithdrawApplyInput{})
+	ginutil.RespondError(c, response.CodeBadRequest, "error.balance_shop_only", err)
 }

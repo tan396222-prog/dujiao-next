@@ -57,6 +57,7 @@ type siteConfigRequest struct {
 	SiteName     string                                   `json:"site_name"`
 	Logo         string                                   `json:"logo"`
 	Favicon      string                                   `json:"favicon"`
+	Wallpaper    string                                   `json:"wallpaper"`
 	Announcement resellermodule.ResellerAnnouncementInput `json:"announcement"`
 	Support      resellermodule.ResellerSupportInput      `json:"support"`
 	SEO          resellermodule.ResellerSEOInput          `json:"seo"`
@@ -69,6 +70,7 @@ func (req siteConfigRequest) toInput() resellermodule.ResellerSiteConfigInput {
 		SiteName:     req.SiteName,
 		Logo:         req.Logo,
 		Favicon:      req.Favicon,
+		Wallpaper:    req.Wallpaper,
 		Announcement: req.Announcement,
 		Support:      req.Support,
 		SEO:          req.SEO,

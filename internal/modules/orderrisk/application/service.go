@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/dujiao-next/internal/logger"
 	orderriskcontract "github.com/dujiao-next/internal/modules/orderrisk/contract"
@@ -21,23 +22,26 @@ type parsedIPBlacklist struct {
 
 // Options 声明订单风控应用服务的全部端口。
 type Options struct {
-	Settings    orderriskcontract.SettingReader
-	RateLimiter orderriskcontract.RateLimiter
+	Settings       orderriskcontract.SettingReader
+	RateLimiter    orderriskcontract.RateLimiter
+	AttemptLimiter orderriskcontract.AttemptLimiter
 }
 
 // Service 编排身份分流、黑名单、商品数量、待支付库存配额和下单频率检查。
 type Service struct {
-	settings    orderriskcontract.SettingReader
-	rateLimiter orderriskcontract.RateLimiter
+	settings       orderriskcontract.SettingReader
+	rateLimiter    orderriskcontract.RateLimiter
+	attemptLimiter orderriskcontract.AttemptLimiter
 
 	mu              sync.RWMutex
 	cachedBlacklist *parsedIPBlacklist
+	nonces          sync.Map
 }
 
 var _ orderriskcontract.Controller = (*Service)(nil)
 
 func NewService(options Options) *Service {
-	return &Service{settings: options.Settings, rateLimiter: options.RateLimiter}
+	return &Service{settings: options.Settings, rateLimiter: options.RateLimiter, attemptLimiter: options.AttemptLimiter}
 }
 
 // CheckOrderAllowed 在订单事务外读取配置并执行前置风控，返回后续事务应复用的配置与规范化 IP。
@@ -58,6 +62,9 @@ func (s *Service) CheckOrderAllowed(input orderriskcontract.CheckInput) (orderri
 		return result, nil
 	}
 	result.ConfigSnapshot = cfg
+	if err := s.consumeOrderAttempts(input, result.RiskIP, cfg); err != nil {
+		return result, err
+	}
 	if !cfg.Enabled {
 		return result, nil
 	}
@@ -69,6 +76,94 @@ func (s *Service) CheckOrderAllowed(input orderriskcontract.CheckInput) (orderri
 		return s.checkGuestOrder(input, result, cfg)
 	}
 	return s.checkMemberOrder(input, result, cfg)
+}
+
+func (s *Service) consumeOrderAttempts(input orderriskcontract.CheckInput, riskIP string, cfg settingssecurity.OrderRiskControlConfig) error {
+	if s == nil || s.attemptLimiter == nil || !input.ConsumeRateLimit || input.SkipIPCheck || riskIP == "" || !cfg.Common.AttemptLimit.Enabled {
+		return nil
+	}
+	return s.attemptLimiter.Consume(riskIP, cfg.Common.AttemptLimit, orderriskcontract.AttemptMeta{
+		Device: input.DeviceSignal,
+		Signal: input.AutomationSignal,
+		UserID: input.UserID,
+		Guest:  input.IsGuest,
+	})
+}
+
+// ListOrderAttempts 返回仍在窗口或封禁期内的下单 IP，以及封禁和解封记录。
+func (s *Service) ListOrderAttempts() (orderriskcontract.AttemptReport, error) {
+	cfg := settingssecurity.DefaultOrderRiskControlConfig()
+	storage := "memory"
+	if s != nil && s.settings != nil {
+		if loaded, err := s.settings.GetOrderRiskControlConfig(); err == nil {
+			cfg = loaded
+		}
+	}
+	report := orderriskcontract.AttemptReport{Limit: cfg.Common.AttemptLimit, Storage: storage}
+	if s == nil || s.attemptLimiter == nil {
+		return report, nil
+	}
+	report.Active, report.Events = s.attemptLimiter.Snapshot(cfg.Common.AttemptLimit.MaxRequests)
+	if len(report.Active) > 0 {
+		report.Storage = report.Active[0].Backend
+	}
+	return report, nil
+}
+
+// InspectOrderAttempt 只查看当前 IP 是否已经在封禁窗口内，不增加计数，也不创建订单。
+func (s *Service) InspectOrderAttempt(clientIP string) (bool, int64) {
+	riskIP := orderriskcontract.NormalizeRiskIP(clientIP)
+	if s == nil || s.attemptLimiter == nil || riskIP == "" {
+		return false, 0
+	}
+	cfg := settingssecurity.DefaultOrderRiskControlConfig()
+	if s.settings != nil {
+		if loaded, err := s.settings.GetOrderRiskControlConfig(); err == nil {
+			cfg = loaded
+		}
+	}
+	if !cfg.Common.AttemptLimit.Enabled {
+		return false, 0
+	}
+	_, retry, banned := s.attemptLimiter.Peek(riskIP, cfg.Common.AttemptLimit.MaxRequests)
+	if !banned {
+		return false, 0
+	}
+	return true, retry
+}
+
+// AcceptProtectionSignal 校验结账预检令牌。无效、过期或重放都只是没有证据，不会因此放行或封禁。
+func (s *Service) AcceptProtectionSignal(subject, token, secret string, now time.Time) string {
+	claims, ok := orderriskcontract.VerifyProtectionToken(secret, token, subject, now)
+	if !ok || s == nil {
+		return ""
+	}
+	if !s.consumeNonce(claims.Nonce) {
+		return ""
+	}
+	return claims.Signal
+}
+
+func (s *Service) consumeNonce(nonce string) bool {
+	if nonce == "" {
+		return false
+	}
+	if _, loaded := s.nonces.LoadOrStore(nonce, time.Now().Add(2*time.Minute)); loaded {
+		return false
+	}
+	return true
+}
+
+// UnbanOrderAttempt 清除一个规范化 IP 的临时下单封禁。它不修改账户状态。
+func (s *Service) UnbanOrderAttempt(raw string) (bool, error) {
+	key := orderriskcontract.ParseAttemptKey(raw)
+	if key == "" {
+		return false, orderriskcontract.ErrAttemptKeyInvalid
+	}
+	if s == nil || s.attemptLimiter == nil {
+		return false, nil
+	}
+	return s.attemptLimiter.Clear(key)
 }
 
 func (s *Service) checkGuestOrder(input orderriskcontract.CheckInput, result orderriskcontract.CheckResult, cfg settingssecurity.OrderRiskControlConfig) (orderriskcontract.CheckResult, error) {

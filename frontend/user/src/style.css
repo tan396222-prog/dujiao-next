@@ -793,3 +793,28 @@ body:not(.vault-tokens) [data-slot='button'].bg-primary {
   --ui-radius-md: 9999px;
   border-radius: 9999px;
 }
+
+.nav-rebate-label {
+  display: inline-block;
+  color: #9a6b12;
+  font-weight: 700;
+  line-height: 1.1;
+  transform-origin: 50% 80%;
+  animation: nav-rebate-sway 2.6s ease-in-out infinite;
+}
+
+.dark .nav-rebate-label {
+  color: #e6c36a;
+}
+
+@keyframes nav-rebate-sway {
+  0%, 100% { transform: rotate(-5deg); }
+  50% { transform: rotate(5deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-rebate-label {
+    animation: none;
+    transform: none;
+  }
+}

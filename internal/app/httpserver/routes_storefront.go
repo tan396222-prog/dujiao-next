@@ -1,17 +1,23 @@
 package httpserver
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/dujiao-next/internal/app/container"
 	"github.com/dujiao-next/internal/app/httpserver/middleware"
 	affiliatebootstrap "github.com/dujiao-next/internal/bootstrap/affiliate"
 	"github.com/dujiao-next/internal/config"
+	"github.com/dujiao-next/internal/constants"
 	affiliatetransport "github.com/dujiao-next/internal/modules/affiliate/transport/http"
+	aifeedhttp "github.com/dujiao-next/internal/modules/aifeed/transport/http"
 	apicredentialtransport "github.com/dujiao-next/internal/modules/apicredential/transport/http"
 	auditlogtransport "github.com/dujiao-next/internal/modules/auditlog/transport/http"
 	captchatransport "github.com/dujiao-next/internal/modules/captcha/transport/http"
 	carttransport "github.com/dujiao-next/internal/modules/cart/transport/http"
 	categoryhttp "github.com/dujiao-next/internal/modules/catalog/category/transport/http"
 	producthttp "github.com/dujiao-next/internal/modules/catalog/product/transport/http"
+	checkinhttp "github.com/dujiao-next/internal/modules/checkin/transport/http"
 	contenttransport "github.com/dujiao-next/internal/modules/content/transport/http"
 	giftcardtransport "github.com/dujiao-next/internal/modules/giftcard/transport/http"
 	userauthtransport "github.com/dujiao-next/internal/modules/identity/userauth/transport/http"
@@ -82,6 +88,9 @@ func registerStorefrontRoutes(
 		captchatransport.RegisterPublicRoutes(public, captchatransport.NewPublicHandler(c.CaptchaService))
 		affiliatetransport.RegisterPublicRoutes(public, affiliateHandler)
 		memberleveltransport.RegisterPublicRoutes(public, publicMemberLevelHandler)
+		if c.AIFeedService != nil {
+			aifeedhttp.RegisterPublicRoutes(public, aifeedhttp.NewHandler(c.AIFeedService))
+		}
 	}
 
 	// 游客接口
@@ -156,6 +165,20 @@ func registerStorefrontRoutes(
 		giftCardRedeem := user.Group("", middleware.RateLimitMiddleware(redisClient, giftCardRedeemRule, middleware.KeyByUserIDAndIP))
 		giftcardtransport.RegisterUserRoutes(giftCardRedeem, userGiftCardHandler)
 		affiliatetransport.RegisterUserRoutes(user, affiliateHandler)
+		if c.CheckInService != nil {
+			redisPrefix := strings.TrimSpace(cfg.Redis.Prefix)
+			if redisPrefix == "" {
+				redisPrefix = constants.RedisPrefixDefault
+			}
+			checkInRule := middleware.RateLimitRule{
+				Prefix:        fmt.Sprintf("%s:rate:daily_checkin", redisPrefix),
+				WindowSeconds: 60,
+				MaxRequests:   10,
+				BlockSeconds:  300,
+				MessageKey:    "error.rate_limited",
+			}
+			checkinhttp.RegisterUserRoutes(user, checkinhttp.NewUserHandler(c.CheckInService), middleware.RateLimitMiddleware(redisClient, checkInRule, middleware.KeyByUserIDAndIP))
+		}
 
 		resellerConsole := user.Group("/reseller")
 		resellerConsole.Use(middleware.RequireMainTenantForResellerConsole())

@@ -91,8 +91,8 @@
                 </h3>
 
                 <div class="mt-1.5 flex flex-wrap items-center gap-1">
-                  <Badge :variant="product.fulfillment_type === 'auto' ? 'info' : 'neutral'" size="xs">
-                    {{ getFulfillmentTypeLabel(product.fulfillment_type) }}
+                  <Badge :variant="showsAutomaticDelivery(product) ? 'info' : 'neutral'" size="xs">
+                    {{ getFulfillmentTypeLabel(product) }}
                   </Badge>
                   <Badge :variant="getStockBadgeVariant(product.stock_status)" size="xs">
                     {{ getStockStatusLabel(product) }}
@@ -275,6 +275,9 @@
             </div>
 
             <!-- Warning -->
+            <p v-if="showPresaleNotice" class="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
+              {{ t('products.presaleNotice') }}
+            </p>
             <p v-if="stockBelowMinPurchase" class="mb-4 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs font-medium text-warning">
               {{ t('productDetail.stockBelowMinPurchase', { count: effectiveMin }) }}
             </p>
@@ -338,7 +341,7 @@ import { useUserAuthStore } from '../stores/userAuth'
 import { useUserProfileStore } from '../stores/userProfile'
 import { getFirstImageUrl, getImageUrl } from '../utils/image'
 import { normalizeSkuId, buildSkuDisplayText } from '../utils/sku'
-import { resolveSkuAvailableStock, resolveSkuStockDisplay, type PublicStockDisplay } from '../utils/publicStock'
+import { allowsBackorder, resolveSkuAvailableStock, resolveSkuStockDisplay, resolveStockTier, stockCapsPurchase, stockTierMessageKey } from '../utils/publicStock'
 import { useLocalized, useProductLabels } from '../composables/useProduct'
 import { toast } from '../composables/useToast'
 import { X, Image as ImageIcon, Tag, Minus, Plus, ShoppingCart } from 'lucide-vue-next'
@@ -366,6 +369,7 @@ const userProfileStore = useUserProfileStore()
 const { getLocalizedText, siteCurrency, formatPrice } = useLocalized()
 const {
   getFulfillmentTypeLabel,
+  showsAutomaticDelivery,
   getStockBadgeVariant,
   getStockStatusLabel,
   isSoldOut,
@@ -555,19 +559,10 @@ const effectiveMin = computed(() => {
   return productMin && productMin > 0 ? productMin : 1
 })
 
-const shouldEnforceSkuStock = (sku: any) => {
-  if (!sku) return false
-  if (sku?.stock_quantity_hidden === true || props.product?.stock_quantity_hidden === true) return false
-  if (props.product?.fulfillment_type === 'auto') return true
-  if (props.product?.fulfillment_type === 'upstream') return true
-  if (props.product?.fulfillment_type !== 'manual') return false
-  const total = normalizeManualStockTotal(sku?.manual_stock_total)
-  return total !== -1
-}
+const shouldEnforceSkuStock = (sku: any) => Boolean(sku) && stockCapsPurchase(props.product)
 
 const skuAvailableStock = (sku: any) => {
-  if (!sku) return 0
-  if (!shouldEnforceSkuStock(sku) && !sku?.stock_quantity_hidden) return null
+  if (!sku || !shouldEnforceSkuStock(sku)) return sku ? null : 0
   return resolveSkuAvailableStock(props.product, sku)
 }
 
@@ -596,32 +591,7 @@ watch(() => [props.product, props.visible], () => {
   }
 }, { immediate: true })
 
-const skuStockText = (sku: any) => {
-  const display = resolveSkuStockDisplay(props.product, sku)
-  return formatSkuStockDisplay(display)
-}
-
-const formatSkuStockDisplay = (display: PublicStockDisplay) => {
-  switch (display.kind) {
-    case 'unlimited':
-      return t('productDetail.skuStockUnlimited')
-    case 'out':
-      return t('productDetail.skuStockOut')
-    case 'remaining':
-      return t('productDetail.skuStockRemaining', { count: display.count })
-    case 'low_stock':
-      return t('productDetail.skuStockLow')
-    case 'hidden':
-      return t('productDetail.skuStockHidden')
-    case 'range':
-      return t('productDetail.skuStockRange', { min: display.min, max: display.max })
-    case 'range_plus':
-      return t('productDetail.skuStockRangePlus', { min: display.min })
-    case 'in_stock':
-    default:
-      return t('productDetail.skuStockInStock')
-  }
-}
+const skuStockText = (sku: any) => t(stockTierMessageKey(resolveStockTier(props.product, sku)))
 
 const skuStockBadgeClass = (sku: any) => {
   const display = resolveSkuStockDisplay(props.product, sku)
@@ -665,12 +635,12 @@ const stockBelowMinPurchase = computed(() => {
   if (limit === null) return false
   return limit < effectiveMin.value
 })
+const showPresaleNotice = computed(() => allowsBackorder(props.product) && resolveStockTier(props.product, selectedSku.value) === 'presale')
 const canPurchase = computed(() => {
   if (!props.product) return false
   if (activeSkus.value.length === 0) return false
-  if (props.product.is_sold_out) return false
+  if (!allowsBackorder(props.product) && (props.product.is_sold_out || props.product.stock_status === 'out_of_stock')) return false
   if (requiresSKUSelection.value) return false
-  if (props.product.stock_status === 'out_of_stock') return false
   if (selectedSku.value && !isSkuPurchasable(selectedSku.value)) return false
   if (stockBelowMinPurchase.value) return false
   return true
@@ -779,6 +749,7 @@ const handleAddToCart = () => {
     maxPurchaseQuantity: normalizeOptionalLimitNumber(props.product.max_purchase_quantity) ?? undefined,
     purchaseType: props.product.purchase_type,
     fulfillmentType: props.product.fulfillment_type,
+    couponSale: props.product.coupon_sale === true,
     manualFormSchema: props.product.manual_form_schema || {},
     paymentChannelIds: Array.isArray(props.product.payment_channel_ids) && props.product.payment_channel_ids.length > 0 ? props.product.payment_channel_ids : undefined,
     quantity: 1,
@@ -833,6 +804,7 @@ const handleBuyNow = () => {
     maxPurchaseQuantity: normalizeOptionalLimitNumber(props.product.max_purchase_quantity) ?? undefined,
     purchaseType: props.product.purchase_type,
     fulfillmentType: props.product.fulfillment_type,
+    couponSale: props.product.coupon_sale === true,
     manualFormSchema: props.product.manual_form_schema || {},
     paymentChannelIds: Array.isArray(props.product.payment_channel_ids) && props.product.payment_channel_ids.length > 0 ? props.product.payment_channel_ids : undefined,
     quantity: quantity.value,

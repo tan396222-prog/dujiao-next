@@ -28,6 +28,34 @@ func TestVerifyCallbackOwnershipV1Success(t *testing.T) {
 	}
 }
 
+func TestVerifyCallbackRejectsMissingWrongAndTamperedSignatures(t *testing.T) {
+	cfg := &Config{EpayVersion: VersionV1, MerchantID: "1001", MerchantKey: "key-001"}
+	form := signEpayV1CallbackForm(t, cfg, map[string]string{
+		"pid": "1001", "out_trade_no": "ORDER-1001", "trade_no": "EPAY-2001",
+		"money": "10.00", "trade_status": constants.EpayTradeStatusSuccess,
+	})
+	delete(form, "sign")
+	if err := VerifyCallback(cfg, form); err == nil {
+		t.Fatal("missing signature was accepted")
+	}
+	form["sign"] = []string{"deadbeef"}
+	form["sign_type"] = []string{"RSA"}
+	if err := VerifyCallback(cfg, form); err == nil {
+		t.Fatal("wrong signature was accepted because sign_type said RSA")
+	}
+	form = signEpayV1CallbackForm(t, cfg, map[string]string{
+		"pid": "1001", "out_trade_no": "ORDER-1001", "trade_no": "EPAY-2001",
+		"money": "10.00", "trade_status": constants.EpayTradeStatusSuccess,
+	})
+	form["money"] = []string{"0.01"}
+	if err := VerifyCallback(cfg, form); err == nil {
+		t.Fatal("tampered amount was accepted")
+	}
+	if err := VerifyCallback(&Config{EpayVersion: VersionV1, MerchantID: "1001"}, form); err == nil {
+		t.Fatal("empty merchant key was accepted")
+	}
+}
+
 func TestVerifyCallbackOwnershipV1MissingPID(t *testing.T) {
 	cfg := &Config{
 		EpayVersion: VersionV1,

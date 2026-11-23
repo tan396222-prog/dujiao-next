@@ -68,6 +68,7 @@ type Service struct {
 type affiliateRefundProcessor interface {
 	HandleOrderRefunded(
 		store affiliatecontract.Store,
+		wallets walletcontract.Repository,
 		order *orderdomain.Order,
 		refundDelta decimal.Decimal,
 		refundedBefore decimal.Decimal,
@@ -287,7 +288,7 @@ func (s *Service) AdminManualRefund(input AdminManualRefundInput) (*orderdomain.
 
 	if err := s.orderStore.WithinTransaction(func(tx ordercontract.Transaction) error {
 		orders := tx.Orders()
-		locked, err := orders.GetByIDForUpdate(input.OrderID)
+		locked, err := orders.GetByIDForUpdateWithChildren(input.OrderID)
 		if err != nil {
 			return err
 		}
@@ -310,6 +311,9 @@ func (s *Service) AdminManualRefund(input AdminManualRefundInput) (*orderdomain.
 			return walletcontract.ErrRefundExceeded
 		}
 		now := time.Now()
+		if err := enforceCouponSaleRefund(tx, &order, amount); err != nil {
+			return err
+		}
 		if err := reserveParentRefund(orders, &order, amount, now); err != nil {
 			return err
 		}
@@ -369,6 +373,7 @@ func (s *Service) AdminManualRefund(input AdminManualRefundInput) (*orderdomain.
 		if s.affiliateRefund != nil && order.UserID > 0 {
 			if err := s.affiliateRefund.HandleOrderRefunded(
 				tx.Affiliates(),
+				tx.Wallets().Wallets(),
 				&order,
 				amount,
 				refundedBefore,

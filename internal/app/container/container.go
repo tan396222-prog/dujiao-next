@@ -6,6 +6,7 @@ import (
 	adproxyapp "github.com/dujiao-next/internal/modules/adproxy/application"
 	affiliateapp "github.com/dujiao-next/internal/modules/affiliate/application"
 	affiliatecontract "github.com/dujiao-next/internal/modules/affiliate/contract"
+	aifeedapp "github.com/dujiao-next/internal/modules/aifeed/application"
 	apicredentialapp "github.com/dujiao-next/internal/modules/apicredential/application"
 	apicredentialcontract "github.com/dujiao-next/internal/modules/apicredential/contract"
 	auditlogapp "github.com/dujiao-next/internal/modules/auditlog/application"
@@ -25,6 +26,8 @@ import (
 	productgormstore "github.com/dujiao-next/internal/modules/catalog/product/store/gormstore"
 	channelclientapp "github.com/dujiao-next/internal/modules/channelclient/application"
 	channelclientcontract "github.com/dujiao-next/internal/modules/channelclient/contract"
+	checkinapp "github.com/dujiao-next/internal/modules/checkin/application"
+	checkingormstore "github.com/dujiao-next/internal/modules/checkin/infrastructure/gormstore"
 	complianceapp "github.com/dujiao-next/internal/modules/compliance/application"
 	contentapp "github.com/dujiao-next/internal/modules/content/application"
 	couponapp "github.com/dujiao-next/internal/modules/coupon/application"
@@ -103,6 +106,7 @@ type Container struct {
 	CardSecretRepo         *cardsecretgormstore.Store
 	CardSecretBatchRepo    *cardsecretgormstore.BatchStore
 	GiftCardRepo           *giftcardgormstore.Store
+	CheckInRepo            *checkingormstore.Store
 	FulfillmentStore       fulfillmentcontract.Store
 	ProductRepo            *productgormstore.ProductStore
 	ProductSKURepo         *productgormstore.SKUStore
@@ -168,6 +172,7 @@ type Container struct {
 	PaymentService                *paymentapp.PaymentService
 	CardSecretService             *cardsecretapp.Service
 	GiftCardService               *giftcardapp.Service
+	CheckInService                *checkinapp.Service
 	UserLoginLogService           *auditlogapp.UserLoginService
 	AuthzAuditService             *auditlogapp.AuthzService
 	AdminLoginLogService          *auditlogapp.AdminLoginService
@@ -196,6 +201,7 @@ type Container struct {
 	MemberLevelService            *memberlevelapp.Service
 	AdProxyService                *adproxyapp.Service
 	OrderRiskControlService       *orderriskapp.Service
+	AIFeedService                 *aifeedapp.Service
 	ComplianceService             *complianceapp.Service
 
 	PaymentProviderRegistry *paymentprovider.Registry

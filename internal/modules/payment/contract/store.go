@@ -1,11 +1,15 @@
 package contract
 
 import (
+	"errors"
 	"time"
 
 	ordercontract "github.com/dujiao-next/internal/modules/order/contract"
 	paymentdomain "github.com/dujiao-next/internal/modules/payment/domain"
 )
+
+// ErrProviderClaimConflict 表示同一商户的外部交易号已经绑定到另一笔支付。
+var ErrProviderClaimConflict = errors.New("payment provider claim conflict")
 
 // Store 是支付记录持久化与事务边界。
 type Store interface {
@@ -22,6 +26,8 @@ type Store interface {
 	ExpirePendingByOrderIDs(orderIDs []uint, expiredAt time.Time) (int64, error)
 	ListAdmin(filter ListFilter) ([]paymentdomain.Payment, int64, error)
 	GetByIDForUpdate(id uint) (*paymentdomain.Payment, error)
+	GetProviderClaimForUpdate(scopeKey, providerRef string) (*paymentdomain.ProviderClaim, error)
+	CreateProviderClaim(claim *paymentdomain.ProviderClaim) error
 	WithinTransaction(fn func(Transaction) error) error
 }
 

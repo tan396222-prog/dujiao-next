@@ -72,7 +72,7 @@ func (s *PaymentService) enqueueOrderPaidAsync(order *orderdomain.Order, payment
 			if child.Status == constants.OrderStatusFulfilling && hasManualFulfillmentItems(&child) {
 				s.enqueueManualFulfillmentPendingAsync(&child, order, log)
 			}
-			if shouldAutoFulfill(&child) {
+			if shouldAutoFulfill(&child) || child.IsCouponSaleOrder() {
 				if err := s.queue.EnqueueOrderAutoFulfill(child.ID); err != nil {
 					log.Warnw("payment_enqueue_auto_fulfill_failed",
 						"order_id", order.ID,
@@ -92,7 +92,7 @@ func (s *PaymentService) enqueueOrderPaidAsync(order *orderdomain.Order, payment
 	if order.Status == constants.OrderStatusFulfilling && hasManualFulfillmentItems(order) {
 		s.enqueueManualFulfillmentPendingAsync(order, nil, log)
 	}
-	if shouldAutoFulfill(order) {
+	if shouldAutoFulfill(order) || order.IsCouponSaleOrder() {
 		if err := s.queue.EnqueueOrderAutoFulfill(order.ID); err != nil {
 			log.Warnw("payment_enqueue_auto_fulfill_failed",
 				"order_id", order.ID,

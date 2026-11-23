@@ -5,6 +5,7 @@ import (
 
 	affiliatecontract "github.com/dujiao-next/internal/modules/affiliate/contract"
 	usercontract "github.com/dujiao-next/internal/modules/identity/user/contract"
+	walletcontract "github.com/dujiao-next/internal/modules/wallet/contract"
 )
 
 const (
@@ -21,6 +22,8 @@ type Service struct {
 	orderRepo   affiliatecontract.OrderReader
 	productRepo affiliatecontract.ProductReader
 	settings    affiliatecontract.SettingsReader
+	wallet      walletcontract.UseCase
+	walletTx    walletcontract.UnitOfWork
 }
 
 // NewService 创建推广返利服务
@@ -38,4 +41,13 @@ func NewService(
 		productRepo: productRepo,
 		settings:    settings,
 	}
+}
+
+// SetWallet 把确认后的佣金转入可购物余额。未设置时佣金仍留在原提现账户。
+func (s *Service) SetWallet(use walletcontract.UseCase, tx walletcontract.UnitOfWork) {
+	if s == nil {
+		return
+	}
+	s.wallet = use
+	s.walletTx = tx
 }

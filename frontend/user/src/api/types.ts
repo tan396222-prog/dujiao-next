@@ -257,6 +257,7 @@ export interface ResellerSiteConfigPayload {
     site_name: string
     logo?: string
     favicon?: string
+    wallpaper?: string
     announcement?: {
         enabled: boolean
         type: string

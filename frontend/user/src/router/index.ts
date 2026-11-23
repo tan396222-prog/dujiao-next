@@ -269,6 +269,11 @@ const router = createRouter({
             component: templateView('GuestOrderDetail', () => import('../views/GuestOrderDetail.vue')),
         },
         {
+            path: '/feed',
+            name: 'feed',
+            component: templateView('AIFeed', () => import('../views/AIFeed.vue')),
+        },
+        {
             path: '/blog',
             name: 'blog',
             component: templateView('Blog', blogViewLoader),
@@ -367,6 +372,11 @@ router.beforeEach(async (to, _from, next) => {
     else {
         next()
     }
+})
+
+// 路由组件加载失败时收起全屏加载层，不让结形标志一直转
+router.onError(() => {
+    useAppStore().loading = false
 })
 
 // Update SEO on route change

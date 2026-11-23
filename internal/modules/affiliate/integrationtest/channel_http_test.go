@@ -8,6 +8,7 @@ import (
 	userauthgormstore "github.com/dujiao-next/internal/modules/identity/userauth/infrastructure/gormstore"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -416,6 +417,18 @@ func TestChannelAffiliateTrackClick(t *testing.T) {
 	}
 }
 
+func TestApplyWithdrawRejectsBeforeStorage(t *testing.T) {
+	service := affiliateapp.NewService(nil, nil, nil, nil, nil)
+	_, err := service.ApplyWithdraw(9, affiliateapp.WithdrawApplyInput{
+		Amount:  decimal.RequireFromString("12.00"),
+		Channel: "alipay",
+		Account: "forged@example.com",
+	})
+	if !errors.Is(err, affiliateapp.ErrShoppingBalanceNotWithdrawable) {
+		t.Fatalf("expected shopping balance rejection, got %v", err)
+	}
+}
+
 func TestChannelAffiliateApplyWithdraw(t *testing.T) {
 	db, server := setupChannelAffiliateHandlerTest(t)
 
@@ -475,12 +488,25 @@ func TestChannelAffiliateApplyWithdraw(t *testing.T) {
 	if err := db.Create(&commission).Error; err != nil {
 		t.Fatalf("create commission failed: %v", err)
 	}
+	existing := affiliatedomain.WithdrawRequest{
+		AffiliateProfileID: profile.ID,
+		Amount:             money.FromDecimal(decimal.RequireFromString("3.00")),
+		Channel:            "alipay",
+		Account:            "already@pay.test",
+		Status:             constants.AffiliateWithdrawStatusPendingReview,
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+	if err := db.Create(&existing).Error; err != nil {
+		t.Fatalf("create existing withdraw failed: %v", err)
+	}
 
 	raw, err := json.Marshal(map[string]any{
 		"channel_user_id": "667788",
 		"amount":          "12.00",
 		"channel":         "alipay",
 		"account":         "demo@pay.test",
+		"user_id":         999,
 	})
 	if err != nil {
 		t.Fatalf("marshal withdraw request failed: %v", err)
@@ -491,19 +517,19 @@ func TestChannelAffiliateApplyWithdraw(t *testing.T) {
 		t.Fatalf("post affiliate withdraw failed: %v", err)
 	}
 	t.Cleanup(func() { _ = resp.Body.Close() })
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected withdraw apply http status 200, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected withdraw apply http status 400, got %d", resp.StatusCode)
 	}
 
 	payload := decodeChannelAffiliateResponse(t, resp)
-	if payload.StatusCode != 0 {
-		t.Fatalf("expected status_code=0, got %d", payload.StatusCode)
+	if payload.StatusCode == 0 {
+		t.Fatal("expected withdraw apply to be rejected")
 	}
-	if payload.Data["status"] != constants.AffiliateWithdrawStatusPendingReview {
-		t.Fatalf("expected pending_review status, got=%v", payload.Data["status"])
+	if payload.ErrorCode != "balance_shop_only" {
+		t.Fatalf("expected balance_shop_only, got %s", payload.ErrorCode)
 	}
-	if payload.Data["amount"] != "12.00" {
-		t.Fatalf("expected amount=12.00, got=%v", payload.Data["amount"])
+	if !strings.Contains(payload.Msg, "不支持提现") && !strings.Contains(payload.Msg, "cannot be withdrawn") {
+		t.Fatalf("expected shopping-only message, got %s", payload.Msg)
 	}
 
 	var withdrawCount int64
@@ -511,6 +537,20 @@ func TestChannelAffiliateApplyWithdraw(t *testing.T) {
 		t.Fatalf("count withdraw requests failed: %v", err)
 	}
 	if withdrawCount != 1 {
-		t.Fatalf("expected 1 withdraw request, got %d", withdrawCount)
+		t.Fatalf("expected the existing withdraw to stay and no new request, got %d", withdrawCount)
+	}
+	var saved affiliatedomain.WithdrawRequest
+	if err := db.First(&saved, existing.ID).Error; err != nil {
+		t.Fatalf("load existing withdraw failed: %v", err)
+	}
+	if saved.Status != constants.AffiliateWithdrawStatusPendingReview {
+		t.Fatalf("existing withdraw status changed to %s", saved.Status)
+	}
+	var savedCommission affiliatedomain.Commission
+	if err := db.First(&savedCommission, commission.ID).Error; err != nil {
+		t.Fatalf("load commission failed: %v", err)
+	}
+	if savedCommission.Status != constants.AffiliateCommissionStatusAvailable || savedCommission.CommissionAmount.StringFixed(2) != "20.00" {
+		t.Fatalf("commission changed: status=%s amount=%s", savedCommission.Status, savedCommission.CommissionAmount.StringFixed(2))
 	}
 }

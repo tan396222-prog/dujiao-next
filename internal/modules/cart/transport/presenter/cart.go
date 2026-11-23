@@ -17,6 +17,7 @@ type CartProductResp struct {
 	MinPurchaseQuantity int               `json:"min_purchase_quantity"`
 	MaxPurchaseQuantity int               `json:"max_purchase_quantity"`
 	FulfillmentType     string            `json:"fulfillment_type"`
+	CouponSale          bool              `json:"coupon_sale"`
 	IsActive            bool              `json:"is_active"`
 }
 

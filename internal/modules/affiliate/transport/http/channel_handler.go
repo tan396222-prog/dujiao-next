@@ -17,7 +17,6 @@ import (
 	"github.com/dujiao-next/internal/platform/http/response"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shopspring/decimal"
 )
 
 // ChannelIdentity 渠道侧开通/解析用户所需的 Telegram 身份字段。
@@ -288,69 +287,10 @@ func (h *ChannelHandler) ListAffiliateWithdraws(c *gin.Context) {
 }
 
 // ApplyAffiliateWithdraw POST /api/v1/channel/affiliate/withdraws
+// 渠道请求同样不能指定金额或账号来提现，也不借此创建用户。
 func (h *ChannelHandler) ApplyAffiliateWithdraw(c *gin.Context) {
-	var req channelApplyWithdrawRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		channelresponse.BindError(c, err)
-		return
-	}
-
-	channelUserID := channelresponse.UserIDValue(req.ChannelUserID, req.TelegramUserID)
-	if channelUserID == "" {
-		channelresponse.Error(c, http.StatusBadRequest, response.CodeBadRequest, "validation_error", "error.bad_request", nil)
-		return
-	}
-
-	amount, err := decimal.NewFromString(strings.TrimSpace(req.Amount))
-	if err != nil {
-		channelresponse.Error(c, http.StatusBadRequest, response.CodeBadRequest, "affiliate_withdraw_amount_invalid", "error.bad_request", nil)
-		return
-	}
-
-	userID, err := h.users.ProvisionUserID(ChannelIdentity{ChannelUserID: channelUserID})
-	if err != nil {
-		ginutil.RequestLog(c).Errorw("channel_affiliate_apply_withdraw_resolve_user", "channel_user_id", channelUserID, "error", err)
-		respondChannelIdentityError(c, err)
-		return
-	}
-
-	row, err := h.affiliate.ApplyWithdraw(userID, affiliateapp.WithdrawApplyInput{
-		Amount:  amount,
-		Channel: strings.TrimSpace(req.Channel),
-		Account: strings.TrimSpace(req.Account),
-	})
-	if err != nil {
-		switch {
-		case errors.Is(err, affiliateapp.ErrDisabled):
-			channelresponse.Error(c, http.StatusBadRequest, response.CodeBadRequest, "affiliate_disabled", "error.forbidden", nil)
-		case errors.Is(err, affiliateapp.ErrNotOpened):
-			channelresponse.Error(c, http.StatusBadRequest, response.CodeBadRequest, "affiliate_not_opened", "error.bad_request", nil)
-		case errors.Is(err, affiliateapp.ErrWithdrawAmountInvalid):
-			channelresponse.Error(c, http.StatusBadRequest, response.CodeBadRequest, "affiliate_withdraw_amount_invalid", "error.bad_request", nil)
-		case errors.Is(err, affiliateapp.ErrWithdrawChannelInvalid):
-			channelresponse.Error(c, http.StatusBadRequest, response.CodeBadRequest, "affiliate_withdraw_channel_invalid", "error.bad_request", nil)
-		case errors.Is(err, affiliateapp.ErrWithdrawInsufficient):
-			channelresponse.Error(c, http.StatusBadRequest, response.CodeBadRequest, "affiliate_withdraw_insufficient", "error.bad_request", nil)
-		default:
-			ginutil.RequestLog(c).Errorw("channel_affiliate_apply_withdraw_failed", "user_id", userID, "channel_user_id", channelUserID, "error", err)
-			channelresponse.Error(c, http.StatusInternalServerError, response.CodeInternal, "affiliate_withdraw_apply_failed", "error.save_failed", err)
-		}
-		return
-	}
-
-	channelresponse.Success(c, gin.H{
-		"id":                   row.ID,
-		"affiliate_profile_id": row.AffiliateProfileID,
-		"amount":               row.Amount,
-		"channel":              row.Channel,
-		"account":              row.Account,
-		"status":               row.Status,
-		"reject_reason":        row.RejectReason,
-		"processed_by":         channelAffiliateUintValue(row.ProcessedBy),
-		"processed_at":         channelAffiliateTimeValue(row.ProcessedAt),
-		"created_at":           row.CreatedAt,
-		"updated_at":           row.UpdatedAt,
-	})
+	_, err := h.affiliate.ApplyWithdraw(0, affiliateapp.WithdrawApplyInput{})
+	channelresponse.Error(c, http.StatusBadRequest, response.CodeBadRequest, "balance_shop_only", "error.balance_shop_only", err)
 }
 
 func (h *ChannelHandler) resolveChannelAffiliateUserID(c *gin.Context) (uint, string, bool) {

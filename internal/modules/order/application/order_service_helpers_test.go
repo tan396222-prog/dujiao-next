@@ -5,6 +5,7 @@ import (
 
 	orderdomain "github.com/dujiao-next/internal/modules/order/domain"
 
+	productdomain "github.com/dujiao-next/internal/modules/catalog/product/domain"
 	coupondomain "github.com/dujiao-next/internal/modules/coupon/domain"
 
 	"github.com/dujiao-next/internal/constants"
@@ -91,6 +92,59 @@ func TestApplyCouponDiscountToItems(t *testing.T) {
 	}
 	if !skuPlans[1].CouponDiscount.Equal(decimal.NewFromInt(20)) {
 		t.Fatalf("expected sku 2 discount 20, got %s", skuPlans[1].CouponDiscount.String())
+	}
+}
+
+func TestApplyCouponDiscountSkipsCouponSale(t *testing.T) {
+	sale := &productdomain.Product{ID: 9, CouponSale: true}
+	plans := []childOrderPlan{
+		{Product: sale, Item: orderdomain.OrderItem{ProductID: 9}, TotalAmount: decimal.NewFromInt(100)},
+		{Product: &productdomain.Product{ID: 2}, Item: orderdomain.OrderItem{ProductID: 2}, TotalAmount: decimal.NewFromInt(100)},
+	}
+	coupon := &coupondomain.Coupon{ScopeType: constants.ScopeTypeStore}
+	if err := applyCouponDiscountToItems(plans, coupon, decimal.NewFromInt(10)); err != nil {
+		t.Fatalf("store coupon should discount ordinary items: %v", err)
+	}
+	if !plans[0].CouponDiscount.Equal(decimal.Zero) || !plans[1].CouponDiscount.Equal(decimal.NewFromInt(10)) {
+		t.Fatalf("coupon sale must not receive the discount: sale=%s ordinary=%s", plans[0].CouponDiscount, plans[1].CouponDiscount)
+	}
+
+	onlySale := []childOrderPlan{{Product: sale, Item: orderdomain.OrderItem{ProductID: 9}, TotalAmount: decimal.NewFromInt(3)}}
+	if err := applyCouponDiscountToItems(onlySale, coupon, decimal.NewFromInt(1)); err == nil {
+		t.Fatal("a cart of only coupon-sale products must not accept a coupon")
+	}
+
+	scoped := &coupondomain.Coupon{ScopeType: constants.ScopeTypeProduct, ScopeRefIDs: "[9,2]"}
+	mixed := []childOrderPlan{
+		{Product: sale, Item: orderdomain.OrderItem{ProductID: 9}, TotalAmount: decimal.NewFromInt(50)},
+		{Product: &productdomain.Product{ID: 2}, Item: orderdomain.OrderItem{ProductID: 2}, TotalAmount: decimal.NewFromInt(50)},
+	}
+	if err := applyCouponDiscountToItems(mixed, scoped, decimal.NewFromInt(5)); err != nil {
+		t.Fatalf("product-scoped coupon should still discount the ordinary product: %v", err)
+	}
+	if !mixed[0].CouponDiscount.Equal(decimal.Zero) || !mixed[1].CouponDiscount.Equal(decimal.NewFromInt(5)) {
+		t.Fatalf("product scope leaked onto coupon sale: sale=%s ordinary=%s", mixed[0].CouponDiscount, mixed[1].CouponDiscount)
+	}
+}
+
+func TestManualLineNeedsPresale(t *testing.T) {
+	product := &productdomain.Product{FulfillmentType: constants.FulfillmentTypeManual}
+	empty := &productdomain.ProductSKU{ManualStockTotal: 0}
+	if !manualLineNeedsPresale(product, empty, 1) {
+		t.Fatal("manual stock 0 must be presale")
+	}
+	if manualLineNeedsPresale(product, &productdomain.ProductSKU{ManualStockTotal: 5}, 5) {
+		t.Fatal("enough manual stock must be reserved")
+	}
+	if manualLineNeedsPresale(product, &productdomain.ProductSKU{ManualStockTotal: constants.ManualStockUnlimited}, 9) {
+		t.Fatal("unlimited stock is not presale")
+	}
+	sale := &productdomain.Product{CouponSale: true, FulfillmentType: constants.FulfillmentTypeManual}
+	if manualLineNeedsPresale(sale, empty, 1) {
+		t.Fatal("coupon sale does not reserve card stock")
+	}
+	if manualLineNeedsPresale(product, nil, 1) {
+		t.Fatal("missing sku is not a presale line")
 	}
 }
 

@@ -44,6 +44,7 @@ type ResellerSiteConfigForm = {
   site_name: string
   logo: string
   favicon: string
+  wallpaper: string
   announcement: {
     enabled: boolean
     type: string
@@ -119,6 +120,7 @@ const createBlankForm = (): ResellerSiteConfigForm => ({
   site_name: '',
   logo: '',
   favicon: '',
+  wallpaper: '',
   announcement: {
     enabled: false,
     type: 'info',
@@ -176,6 +178,7 @@ const normalizeConfigForForm = (row: AdminResellerSiteConfig): ResellerSiteConfi
     site_name: row.site_name || '',
     logo: row.logo || '',
     favicon: row.favicon || '',
+    wallpaper: row.wallpaper || '',
     announcement: {
       enabled: announcement.enabled === true,
       type: String(announcement.type || 'info'),
@@ -203,6 +206,7 @@ const buildPayload = (): AdminResellerSiteConfigPayload => ({
   site_name: form.site_name.trim(),
   logo: form.logo.trim(),
   favicon: form.favicon.trim(),
+  wallpaper: form.wallpaper.trim(),
   announcement: {
     enabled: form.announcement.enabled,
     type: form.announcement.type.trim() || 'info',
@@ -475,6 +479,16 @@ onMounted(() => {
                 <Label>{{ t('admin.resellerSiteConfigs.fields.favicon') }}</Label>
                 <MediaPicker v-model="form.favicon" scene="reseller" />
               </div>
+            </div>
+            <div class="grid gap-2">
+              <Label>{{ t('admin.resellerSiteConfigs.fields.wallpaper') }}</Label>
+              <MediaPicker
+                v-model="form.wallpaper"
+                scene="reseller"
+                :max-bytes="8 * 1024 * 1024"
+                :allowed-extensions="['.jpg', '.jpeg', '.png', '.webp']"
+              />
+              <p class="text-xs text-muted-foreground">{{ t('admin.resellerSiteConfigs.fields.wallpaperTip') }}</p>
             </div>
           </TabsContent>
 

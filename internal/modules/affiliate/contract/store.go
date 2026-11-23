@@ -70,7 +70,9 @@ type Store interface {
 	WithinTransaction(fn func(Store) error) error
 
 	GetProfileByID(id uint) (*domain.Profile, error)
+	GetProfileByIDForUpdate(id uint) (*domain.Profile, error)
 	UpdateProfileStatus(id uint, status string, updatedAt time.Time) error
+	UpdateProfileDebt(profile *domain.Profile) error
 	BatchUpdateProfileStatus(ids []uint, status string, updatedAt time.Time) (int64, error)
 	GetProfileByUserID(userID uint) (*domain.Profile, error)
 	GetProfileByCode(code string) (*domain.Profile, error)
@@ -83,6 +85,7 @@ type Store interface {
 	CountClicksByProfile(profileID uint) (int64, error)
 
 	GetCommissionByOrderAndProfile(orderID, profileID uint, commissionType string) (*domain.Commission, error)
+	GetCommissionByIDForUpdate(id uint) (*domain.Commission, error)
 	CreateCommission(commission *domain.Commission) error
 	UpdateCommission(commission *domain.Commission) error
 	ListCommissions(filter CommissionListFilter) ([]domain.Commission, int64, error)

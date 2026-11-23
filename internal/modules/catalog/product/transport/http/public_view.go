@@ -39,6 +39,7 @@ type publicProductView struct {
 	AutoStockAvailable   int64
 	StockStatus          string
 	IsSoldOut            bool
+	Backorder            bool
 }
 
 // toProductResp 将内部计算结构转换为公共 DTO
@@ -94,6 +95,8 @@ func (v *publicProductView) toProductResp() productpresenter.Product {
 		StockRangeMax:        productDisplay.RangeMax,
 		StockQuantityHidden:  productDisplay.QuantityHidden,
 		FulfillmentType:      v.Product.FulfillmentType,
+		CouponSale:           v.Product.CouponSale,
+		Backorder:            v.Backorder,
 		ManualFormSchema:     v.Product.ManualFormSchemaJSON,
 		ManualStockAvailable: domaincatalog.MaskStockInt(mode, v.ManualStockAvailable),
 		AutoStockAvailable:   domaincatalog.MaskStockInt64(mode, v.AutoStockAvailable),

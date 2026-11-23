@@ -4,6 +4,9 @@ import (
 	"errors"
 	"path/filepath"
 	"reflect"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,6 +16,7 @@ import (
 	orderstore "github.com/dujiao-next/internal/modules/order/infrastructure/gormstore"
 	orderriskcontract "github.com/dujiao-next/internal/modules/orderrisk/contract"
 	orderriskdomain "github.com/dujiao-next/internal/modules/orderrisk/domain"
+	orderrisklimiter "github.com/dujiao-next/internal/modules/orderrisk/infrastructure/redislimiter"
 	settingsapp "github.com/dujiao-next/internal/modules/settings/application"
 	settingsstore "github.com/dujiao-next/internal/modules/settings/infrastructure/gormstore"
 	settingssecurity "github.com/dujiao-next/internal/modules/settings/schema/security"
@@ -357,4 +361,172 @@ func TestCheckOrderAllowed_GuestReturnsExpiryOverride(t *testing.T) {
 	if result.PaymentExpireMinutes != 8 {
 		t.Fatalf("expected guest expiry 8, got %d", result.PaymentExpireMinutes)
 	}
+}
+
+func TestOrderAttemptLimitAppliesWhenMasterSwitchIsOff(t *testing.T) {
+	limiter := orderrisklimiter.New()
+	svc := NewService(Options{
+		Settings:       settingReaderStub{config: settingssecurity.DefaultOrderRiskControlConfig()},
+		AttemptLimiter: limiter,
+	})
+	for i := 0; i < 20; i++ {
+		if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.20", true, true)); err != nil {
+			t.Fatalf("attempt %d: %v", i+1, err)
+		}
+	}
+	if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.20", false, true)); !errors.Is(err, orderriskcontract.ErrOrderRateLimited) {
+		t.Fatalf("member on the same IP must share the ban, got %v", err)
+	}
+	if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.21", true, true)); err != nil {
+		t.Fatalf("a different IP must stay allowed, got %v", err)
+	}
+	for i := 0; i < 5; i++ {
+		if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.20", true, false)); err != nil {
+			t.Fatalf("preview must not be blocked or counted, got %v", err)
+		}
+	}
+}
+
+func TestOrderAttemptLimitSkipsChannelOrdersAndEmptyIP(t *testing.T) {
+	limiter := orderrisklimiter.New()
+	svc := NewService(Options{
+		Settings:       settingReaderStub{config: settingssecurity.DefaultOrderRiskControlConfig()},
+		AttemptLimiter: limiter,
+	})
+	for i := 0; i < 30; i++ {
+		input := attemptInput("198.51.100.30", true, true)
+		input.SkipIPCheck = true
+		if _, err := svc.CheckOrderAllowed(input); err != nil {
+			t.Fatalf("channel order must skip IP attempts: %v", err)
+		}
+	}
+	if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.30", true, true)); err != nil {
+		t.Fatalf("skipped attempts must not consume the IP quota, got %v", err)
+	}
+}
+
+func TestOrderAttemptBanExpiresAndCanBeCleared(t *testing.T) {
+	limiter := orderrisklimiter.New()
+	cfg := settingssecurity.DefaultOrderRiskControlConfig()
+	cfg.Common.AttemptLimit.BlockSeconds = 1
+	svc := NewService(Options{Settings: settingReaderStub{config: cfg}, AttemptLimiter: limiter})
+	for i := 0; i < 20; i++ {
+		if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.40", true, true)); err != nil {
+			t.Fatalf("attempt %d: %v", i+1, err)
+		}
+	}
+	if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.40", true, true)); !errors.Is(err, orderriskcontract.ErrOrderRateLimited) {
+		t.Fatalf("expected ban, got %v", err)
+	}
+	cleared, err := svc.UnbanOrderAttempt("198.51.100.40")
+	if err != nil || !cleared {
+		t.Fatalf("unban cleared=%v err=%v", cleared, err)
+	}
+	if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.40", true, true)); err != nil {
+		t.Fatalf("unban must allow the next order, got %v", err)
+	}
+	for i := 0; i < 19; i++ {
+		if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.41", true, true)); err != nil {
+			t.Fatalf("refill %d: %v", i, err)
+		}
+	}
+	if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.41", true, true)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.41", true, true)); !errors.Is(err, orderriskcontract.ErrOrderRateLimited) {
+		t.Fatalf("expected fresh ban, got %v", err)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	if _, err := svc.CheckOrderAllowed(attemptInput("198.51.100.41", true, true)); err != nil {
+		t.Fatalf("ban must expire, got %v", err)
+	}
+}
+
+func TestOrderAttemptLimitIsAtomicAndDoesNotPunishAnotherIPForTheSameDevice(t *testing.T) {
+	limiter := orderrisklimiter.New()
+	cfg := settingssecurity.OrderRateLimitConfig{Enabled: true, WindowSeconds: 60, MaxRequests: 20, BlockSeconds: 86400}
+	meta := orderriskcontract.AttemptMeta{Device: "0123456789abcdef"}
+	var allowed atomic.Int64
+	var wg sync.WaitGroup
+	for i := 0; i < 40; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := limiter.Consume("203.0.113.50", cfg, meta); err == nil {
+				allowed.Add(1)
+			}
+		}()
+	}
+	wg.Wait()
+	if allowed.Load() != 20 {
+		t.Fatalf("allowed %d concurrent attempts, want 20", allowed.Load())
+	}
+	if err := limiter.Consume("203.0.113.51", cfg, meta); err != nil {
+		t.Fatalf("the same device mark from another IP must not be banned, got %v", err)
+	}
+	if err := limiter.Consume("203.0.113.50", cfg, meta); !errors.Is(err, orderriskcontract.ErrOrderRateLimited) {
+		t.Fatalf("the busy IP must stay banned, got %v", err)
+	}
+}
+
+func TestOrderAttemptIPv6PrefixIsShared(t *testing.T) {
+	limiter := orderrisklimiter.New()
+	svc := NewService(Options{
+		Settings:       settingReaderStub{config: settingssecurity.DefaultOrderRiskControlConfig()},
+		AttemptLimiter: limiter,
+	})
+	for i := 0; i < 20; i++ {
+		if _, err := svc.CheckOrderAllowed(attemptInput("2001:db8:abcd:12::"+string(rune('a'+i%6)), true, true)); err != nil {
+			t.Fatalf("ipv6 attempt %d: %v", i, err)
+		}
+	}
+	if _, err := svc.CheckOrderAllowed(attemptInput("2001:db8:abcd:12::ffff", true, true)); !errors.Is(err, orderriskcontract.ErrOrderRateLimited) {
+		t.Fatalf("same /64 must share the counter, got %v", err)
+	}
+	if _, err := svc.CheckOrderAllowed(attemptInput("2001:db8:eeee:12::1", true, true)); err != nil {
+		t.Fatalf("different /64 must stay allowed, got %v", err)
+	}
+}
+
+func TestDeviceSignalRejectsForgeryAndExpiry(t *testing.T) {
+	secret := "test-device-secret"
+	now := time.Unix(1_700_000_000, 0)
+	token, id, err := orderriskcontract.IssueDeviceToken(secret, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, ok := orderriskcontract.VerifyDeviceToken(secret, token, now.Add(time.Hour))
+	if !ok || got != id {
+		t.Fatalf("valid token id=%q ok=%v", got, ok)
+	}
+	if _, ok := orderriskcontract.VerifyDeviceToken("other-secret", token, now); ok {
+		t.Fatal("token must not verify under another secret")
+	}
+	dot := strings.LastIndex(token, ".")
+	replacement := "1"
+	if token[dot+1] == '1' {
+		replacement = "2"
+	}
+	forged := token[:dot+1] + replacement + token[dot+2:]
+	if _, ok := orderriskcontract.VerifyDeviceToken(secret, forged, now); ok {
+		t.Fatal("tampered token must be ignored")
+	}
+	if _, ok := orderriskcontract.VerifyDeviceToken(secret, token, now.Add(25*time.Hour)); ok {
+		t.Fatal("expired token must be ignored")
+	}
+	if key := orderriskcontract.ParseAttemptKey("10.0.0.0/8"); key != "" {
+		t.Fatalf("cidr unban key = %q", key)
+	}
+	full := "2001:db8:abcd:12::99"
+	if orderriskcontract.ParseAttemptKey(full) != orderriskcontract.NormalizeRiskIP(full) {
+		t.Fatal("ipv6 unban must use the stored /64 key")
+	}
+}
+
+func attemptInput(ip string, guest bool, consume bool) orderriskcontract.CheckInput {
+	input := orderriskcontract.CheckInput{IsGuest: guest, ClientIP: ip, ConsumeRateLimit: consume, DeviceSignal: "0123456789abcdef"}
+	if !guest {
+		input.UserID = 7
+	}
+	return input
 }

@@ -22,6 +22,14 @@ func (r *Store) Create(fulfillment *fulfillmentdomain.Fulfillment) error {
 	return r.db.Create(fulfillment).Error
 }
 
+// Update 更新交付内容。售券退款时拿掉已经失效的券码。
+func (r *Store) Update(fulfillment *fulfillmentdomain.Fulfillment) error {
+	if fulfillment == nil || fulfillment.ID == 0 {
+		return nil
+	}
+	return r.db.Save(fulfillment).Error
+}
+
 // GetByOrderID 根据订单 ID 获取交付记录(不存在返回 nil, nil),不加锁。
 func (r *Store) GetByOrderID(orderID uint) (*fulfillmentdomain.Fulfillment, error) {
 	var existing fulfillmentdomain.Fulfillment
