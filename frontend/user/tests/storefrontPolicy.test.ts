@@ -30,6 +30,38 @@ test('daily check-in waits for a click and does not offset commission debt', () 
   assert.match(card, /@click="claimCheckIn"/)
 })
 
+test('check-in copy shows the actual reward and hides every amount range', () => {
+  const card = read('../src/components/DailyCheckInCard.vue')
+  const celebration = read('../src/components/CheckInCelebration.vue')
+  const api = read('../src/api/checkin.ts')
+  assert.match(api, /post\('\/daily-checkins', \{\}\)/)
+  const visible = `${card.split('<script')[0]}\n${celebration.split('<style')[0]}`
+  assert.equal(/\d+\.\d{2}/.test(visible), false)
+  for (const locale of ['zh-CN', 'zh-TW', 'en-US']) {
+    const messages = JSON.parse(read(`../src/i18n/locales/${locale}.json`))
+    const checkin = messages.personalCenter.checkin
+    const blob = JSON.stringify(checkin)
+    for (const leaked of ['0.10', '0.80', '0.01', '0.30', '1.80', '2.20', '3%', '首签', '首簽', 'first check-in']) {
+      assert.equal(blob.includes(leaked), false, `${locale} leaked ${leaked}`)
+    }
+    assert.match(checkin.subtitle, /withdrawn|不支持提现|不支持提現/)
+    assert.match(checkin.reward, /reward|奖励|獎勵/)
+    assert.match(checkin.balance, /balance|余额|餘額/)
+    assert.match(checkin.tomorrow, /\{date\}/)
+  }
+  const claimed = dailyCheckInView({
+    checked_in: true,
+    reward_amount: '1.80',
+    balance: '2.49',
+    next_checkin_date: '2026-11-24',
+    debt_offset_amount: '0.00',
+    offsets_unrecovered_commission: false,
+  })
+  assert.equal(claimed.reward, '1.80')
+  assert.equal(claimed.balance, '2.49')
+  assert.equal(claimed.tomorrow, '2026-11-24')
+})
+
 test('the rebate page no longer offers a withdrawal form', () => {
   const panel = read('../src/views/personal/AffiliatePanel.vue')
   assert.equal(panel.includes('handleApplyWithdraw'), false)

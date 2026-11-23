@@ -6,20 +6,29 @@ import (
 )
 
 func TestCryptoRewardStaysInsideInclusiveRange(t *testing.T) {
-	seen := map[int64]int{}
 	source := CryptoReward{}
-	for i := 0; i < 4000; i++ {
-		cents, err := source.Cents()
+	assertBand(t, source, RewardBandDaily, DailyMinRewardCents, DailyMaxRewardCents)
+	assertBand(t, source, RewardBandFirst, FirstMinRewardCents, FirstMaxRewardCents)
+	if _, err := source.Cents(RewardBand(9)); err == nil {
+		t.Fatal("unknown band should fail")
+	}
+}
+
+func assertBand(t *testing.T, source CryptoReward, band RewardBand, min, max int64) {
+	t.Helper()
+	seen := map[int64]int{}
+	for i := 0; i < 8000; i++ {
+		cents, err := source.Cents(band)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if cents < MinRewardCents || cents > MaxRewardCents {
-			t.Fatalf("cents %d outside 10..80", cents)
+		if cents < min || cents > max {
+			t.Fatalf("band %d cents %d outside %d..%d", band, cents, min, max)
 		}
 		seen[cents]++
 	}
-	if seen[MinRewardCents] == 0 || seen[MaxRewardCents] == 0 {
-		t.Fatalf("expected both endpoints, got 10=%d 80=%d", seen[MinRewardCents], seen[MaxRewardCents])
+	if seen[min] == 0 || seen[max] == 0 {
+		t.Fatalf("band %d missing endpoint, %d=%d %d=%d", band, min, seen[min], max, seen[max])
 	}
 }
 

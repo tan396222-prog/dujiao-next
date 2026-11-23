@@ -10,9 +10,32 @@ import (
 )
 
 const (
-	MinRewardCents = 10
-	MaxRewardCents = 80
+	// 非首签每天 1 到 30 分，含两端。
+	DailyMinRewardCents int64 = 1
+	DailyMaxRewardCents int64 = 30
+	// 账号第一次成功签到 180 到 220 分，含两端。
+	FirstMinRewardCents int64 = 180
+	FirstMaxRewardCents int64 = 220
 )
+
+// RewardBand 由服务端在持有账号锁时决定，不接受客户端传入。
+type RewardBand int
+
+const (
+	RewardBandDaily RewardBand = iota
+	RewardBandFirst
+)
+
+func (b RewardBand) bounds() (int64, int64, bool) {
+	switch b {
+	case RewardBandDaily:
+		return DailyMinRewardCents, DailyMaxRewardCents, true
+	case RewardBandFirst:
+		return FirstMinRewardCents, FirstMaxRewardCents, true
+	default:
+		return 0, 0, false
+	}
+}
 
 var shanghai = time.FixedZone("Asia/Shanghai", 8*60*60)
 
@@ -30,28 +53,32 @@ func NextBeijingDate(date string) string {
 	return parsed.AddDate(0, 0, 1).Format("2006-01-02")
 }
 
-// RewardSource 产生 10 到 80 之间的整数分。
+// RewardSource 按服务端指定的区间产生均匀的整数分。
 type RewardSource interface {
-	Cents() (int64, error)
+	Cents(band RewardBand) (int64, error)
 }
 
-// CryptoReward 使用 crypto/rand，端点 10 和 80 都包含在内。
+// CryptoReward 使用 crypto/rand。日常区间和首签区间的两端都包含在内。
 type CryptoReward struct {
 	Reader io.Reader
 }
 
-func (r CryptoReward) Cents() (int64, error) {
+func (r CryptoReward) Cents(band RewardBand) (int64, error) {
+	min, max, ok := band.bounds()
+	if !ok {
+		return 0, contract.ErrRewardOutOfRange
+	}
 	reader := r.Reader
 	if reader == nil {
 		reader = rand.Reader
 	}
-	span := int64(MaxRewardCents - MinRewardCents + 1)
+	span := max - min + 1
 	n, err := rand.Int(reader, big.NewInt(span))
 	if err != nil {
 		return 0, err
 	}
-	cents := n.Int64() + MinRewardCents
-	if cents < MinRewardCents || cents > MaxRewardCents {
+	cents := n.Int64() + min
+	if cents < min || cents > max {
 		return 0, contract.ErrRewardOutOfRange
 	}
 	return cents, nil

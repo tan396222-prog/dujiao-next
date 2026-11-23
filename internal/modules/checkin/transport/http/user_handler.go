@@ -106,6 +106,10 @@ var forbiddenClientKeys = map[string]struct{}{
 	"checkin_date":  {},
 	"reward":        {},
 	"reward_amount": {},
+	"first":         {},
+	"first_checkin": {},
+	"is_first":      {},
+	"bonus":         {},
 }
 
 func rejectClientFields(c *gin.Context) bool {

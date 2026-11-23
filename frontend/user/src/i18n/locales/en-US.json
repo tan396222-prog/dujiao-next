@@ -607,7 +607,7 @@
     },
     "checkin": {
       "title": "Daily check-in",
-      "subtitle": "Check in once each Beijing calendar day for a random 0.10 to 0.80 CNY shopping-balance reward. The balance can only be used for in-store purchases and cannot be withdrawn.",
+      "subtitle": "Check in each day for a random shopping reward. You can see the amount after it arrives. The balance can only be used for in-store purchases and cannot be withdrawn.",
       "claim": "Check in",
       "claiming": "Checking in",
       "claimed": "Checked in today",
@@ -615,7 +615,7 @@
       "reward": "Today's reward",
       "balance": "Shopping balance",
       "tomorrow": "You can check in again after Beijing midnight on {date}",
-      "debtNote": "The full reward enters the shopping balance. It does not offset unrecovered affiliate commission and does not change the 3% rule.",
+      "debtNote": "The amount shown is the reward that arrived.",
       "debtOffset": "{amount} of this reward offset unrecovered affiliate commission.",
       "errors": {
         "loadFailed": "Couldn't load check-in status. Please try again.",

@@ -11,6 +11,7 @@ import (
 	userdomain "github.com/dujiao-next/internal/modules/identity/user/domain"
 	walletapp "github.com/dujiao-next/internal/modules/wallet/application"
 	walletcontract "github.com/dujiao-next/internal/modules/wallet/contract"
+	walletdomain "github.com/dujiao-next/internal/modules/wallet/domain"
 	walletgormstore "github.com/dujiao-next/internal/modules/wallet/infrastructure/gormstore"
 	"github.com/dujiao-next/internal/shared/money"
 
@@ -76,6 +77,57 @@ func (tx *claimTx) FindCheckIn(userID uint, date string) (*checkindomain.CheckIn
 
 func (tx *claimTx) InsertCheckIn(row *checkindomain.CheckIn) error {
 	return tx.checkIns.Insert(row)
+}
+
+func (tx *claimTx) ExistingCredit(userID uint, reference string) (checkincontract.CreditResult, bool, error) {
+	if tx == nil || tx.wallets == nil || userID == 0 {
+		return checkincontract.CreditResult{}, false, checkincontract.ErrFailed
+	}
+	existing, err := tx.wallets.GetTransactionByReference(reference)
+	if err != nil || existing == nil {
+		return checkincontract.CreditResult{}, false, err
+	}
+	if existing.UserID != userID || existing.Type != constants.WalletTxnTypeDailyCheckIn || existing.Direction != constants.WalletTxnDirectionIn {
+		return checkincontract.CreditResult{}, false, checkincontract.ErrFailed
+	}
+	balance, err := tx.Balance(userID)
+	if err != nil {
+		return checkincontract.CreditResult{}, false, err
+	}
+	return checkincontract.CreditResult{
+		TransactionID:   existing.ID,
+		Amount:          existing.Amount,
+		Balance:         balance,
+		AlreadyRecorded: true,
+	}, true, nil
+}
+
+func (tx *claimTx) HasPriorReward(userID uint) (bool, error) {
+	if tx == nil || tx.db == nil || userID == 0 {
+		return false, checkincontract.ErrFailed
+	}
+	var checkInID uint
+	err := tx.db.Unscoped().Model(&checkindomain.CheckIn{}).
+		Select("id").
+		Where("user_id = ?", userID).
+		Limit(1).
+		Scan(&checkInID).Error
+	if err != nil {
+		return false, err
+	}
+	if checkInID != 0 {
+		return true, nil
+	}
+	var txnID uint
+	err = tx.db.Unscoped().Model(&walletdomain.Transaction{}).
+		Select("id").
+		Where("user_id = ? AND type = ?", userID, constants.WalletTxnTypeDailyCheckIn).
+		Limit(1).
+		Scan(&txnID).Error
+	if err != nil {
+		return false, err
+	}
+	return txnID != 0, nil
 }
 
 func (tx *claimTx) Balance(userID uint) (money.Amount, error) {

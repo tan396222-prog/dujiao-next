@@ -31,16 +31,38 @@ import (
 
 type fixedCents int64
 
-func (f fixedCents) Cents() (int64, error) { return int64(f), nil }
+func (f fixedCents) Cents(checkinapp.RewardBand) (int64, error) { return int64(f), nil }
 
 type countingReward struct {
 	cents int64
 	calls *int
 }
 
-func (c countingReward) Cents() (int64, error) {
+func (c countingReward) Cents(checkinapp.RewardBand) (int64, error) {
 	*c.calls++
 	return c.cents, nil
+}
+
+type bandReward struct {
+	mu    sync.Mutex
+	first int64
+	daily int64
+	bands []checkinapp.RewardBand
+	fail  int
+}
+
+func (b *bandReward) Cents(band checkinapp.RewardBand) (int64, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.bands = append(b.bands, band)
+	if b.fail > 0 {
+		b.fail--
+		return 0, errors.New("reward unavailable")
+	}
+	if band == checkinapp.RewardBandFirst {
+		return b.first, nil
+	}
+	return b.daily, nil
 }
 
 func openCheckInDB(t *testing.T) *gorm.DB {
@@ -142,23 +164,23 @@ func TestClaimBoundariesAreIdempotentAndDoNotOffsetDebt(t *testing.T) {
 		t.Fatal(err)
 	}
 	calls := 0
-	service := newCheckInService(db, 80, now, countingReward{cents: 80, calls: &calls})
+	service := newCheckInService(db, 220, now, countingReward{cents: 220, calls: &calls})
 
 	first, err := service.Claim(user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Reward.String() != "0.80" || first.Balance.String() != "0.80" || first.AlreadyClaimed || first.OffsetsUnrecoveredCommission || first.DebtOffset.String() != "0.00" {
+	if first.Reward.String() != "2.20" || first.Balance.String() != "2.20" || first.AlreadyClaimed || first.OffsetsUnrecoveredCommission || first.DebtOffset.String() != "0.00" {
 		t.Fatalf("first claim: %+v", first)
 	}
 	second, err := service.Claim(user.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Reward.String() != "0.80" || !second.AlreadyClaimed || second.Balance.String() != "0.80" || calls != 1 {
+	if second.Reward.String() != "2.20" || !second.AlreadyClaimed || second.Balance.String() != "2.20" || calls != 1 {
 		t.Fatalf("replay reward=%s claimed=%v balance=%s draws=%d", second.Reward, second.AlreadyClaimed, second.Balance, calls)
 	}
-	assertBalance(t, db, user.ID, "0.80")
+	assertBalance(t, db, user.ID, "2.20")
 	if countTxns(t, db, user.ID) != 1 {
 		t.Fatal("replay created another wallet transaction")
 	}
@@ -180,11 +202,11 @@ func TestClaimBoundariesAreIdempotentAndDoNotOffsetDebt(t *testing.T) {
 		t.Fatalf("remark %s", txn.Remark)
 	}
 
-	low := newCheckInService(db, 10, now, nil)
+	low := newCheckInService(db, 180, now, nil)
 	other := seedUser(t, db, constants.UserStatusActive, false)
 	lowResult, err := low.Claim(other.ID)
-	if err != nil || lowResult.Reward.String() != "0.10" {
-		t.Fatalf("low boundary: %+v %v", lowResult, err)
+	if err != nil || lowResult.Reward.String() != "1.80" || lowResult.Balance.String() != "1.80" || lowResult.AlreadyClaimed {
+		t.Fatalf("first low boundary: %+v %v", lowResult, err)
 	}
 }
 
@@ -193,14 +215,14 @@ func TestClaimUsesShanghaiMidnightAndKeepsOneRowUnderConcurrency(t *testing.T) {
 	user := seedUser(t, db, constants.UserStatusActive, false)
 	earlyNow := time.Date(2026, 11, 22, 15, 59, 30, 0, time.UTC)
 	lateNow := time.Date(2026, 11, 22, 16, 0, 30, 0, time.UTC)
-	early := newCheckInService(db, 10, earlyNow, nil)
-	late := newCheckInService(db, 80, lateNow, nil)
+	early := newCheckInService(db, 180, earlyNow, nil)
+	late := newCheckInService(db, 30, lateNow, nil)
 	first, err := early.Claim(user.ID)
-	if err != nil || first.CheckinDate != "2026-11-22" || first.Reward.String() != "0.10" {
+	if err != nil || first.CheckinDate != "2026-11-22" || first.Reward.String() != "1.80" {
 		t.Fatalf("early: %+v %v", first, err)
 	}
 	second, err := late.Claim(user.ID)
-	if err != nil || second.CheckinDate != "2026-11-23" || second.Reward.String() != "0.80" || second.Balance.String() != "0.90" {
+	if err != nil || second.CheckinDate != "2026-11-23" || second.Reward.String() != "0.30" || second.Balance.String() != "2.10" {
 		t.Fatalf("late: %+v %v", second, err)
 	}
 	if countTxns(t, db, user.ID) != 2 {
@@ -208,7 +230,7 @@ func TestClaimUsesShanghaiMidnightAndKeepsOneRowUnderConcurrency(t *testing.T) {
 	}
 
 	racer := seedUser(t, db, constants.UserStatusActive, false)
-	service := newCheckInService(db, 55, earlyNow, nil)
+	service := newCheckInService(db, 200, earlyNow, nil)
 	var wg sync.WaitGroup
 	errs := make(chan error, 2)
 	results := make(chan checkinapp.Result, 2)
@@ -233,20 +255,20 @@ func TestClaimUsesShanghaiMidnightAndKeepsOneRowUnderConcurrency(t *testing.T) {
 	seen := 0
 	for result := range results {
 		seen++
-		if result.Reward.String() != "0.55" {
+		if result.Reward.String() != "2.00" {
 			t.Fatalf("concurrent reward %s", result.Reward)
 		}
 	}
 	if seen != 2 || countTxns(t, db, racer.ID) != 1 {
 		t.Fatalf("concurrent claims=%d txns=%d", seen, countTxns(t, db, racer.ID))
 	}
-	assertBalance(t, db, racer.ID, "0.55")
+	assertBalance(t, db, racer.ID, "2.00")
 }
 
 func TestClaimRejectsUnavailableAccountsAndForgedRewardRange(t *testing.T) {
 	db := openCheckInDB(t)
 	now := time.Date(2026, 11, 22, 9, 0, 0, 0, time.UTC)
-	service := newCheckInService(db, 40, now, nil)
+	service := newCheckInService(db, 200, now, nil)
 	for _, user := range []userdomain.User{
 		seedUser(t, db, constants.UserStatusDisabled, false),
 		seedUser(t, db, "banned", false),
@@ -260,9 +282,11 @@ func TestClaimRejectsUnavailableAccountsAndForgedRewardRange(t *testing.T) {
 		}
 	}
 	active := seedUser(t, db, constants.UserStatusActive, false)
-	out := newCheckInService(db, 9, now, nil)
-	if _, err := out.Claim(active.ID); !errors.Is(err, contract.ErrRewardOutOfRange) {
-		t.Fatal(err)
+	for _, cents := range []int64{179, 221, 30, 0} {
+		out := newCheckInService(db, cents, now, nil)
+		if _, err := out.Claim(active.ID); !errors.Is(err, contract.ErrRewardOutOfRange) {
+			t.Fatalf("cents %d: %v", cents, err)
+		}
 	}
 	if countTxns(t, db, active.ID) != 0 {
 		t.Fatal("out of range reward was credited")
@@ -283,7 +307,7 @@ func TestClaimRestoresRowFromExistingLedgerAndRollsBackFailedCredit(t *testing.T
 	now := time.Date(2026, 11, 22, 10, 0, 0, 0, time.UTC)
 	user := seedUser(t, db, constants.UserStatusActive, false)
 	calls := 0
-	service := newCheckInService(db, 40, now, countingReward{cents: 40, calls: &calls})
+	service := newCheckInService(db, 200, now, countingReward{cents: 200, calls: &calls})
 	if _, err := service.Claim(user.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -294,8 +318,8 @@ func TestClaimRestoresRowFromExistingLedgerAndRollsBackFailedCredit(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Reward.String() != "0.40" || again.Balance.String() != "0.40" || countTxns(t, db, user.ID) != 1 {
-		t.Fatalf("restored %+v txns=%d", again, countTxns(t, db, user.ID))
+	if again.Reward.String() != "2.00" || again.Balance.String() != "2.00" || countTxns(t, db, user.ID) != 1 || calls != 1 {
+		t.Fatalf("restored %+v txns=%d draws=%d", again, countTxns(t, db, user.ID), calls)
 	}
 	var rows int64
 	if err := db.Model(&checkindomain.CheckIn{}).Where("user_id = ?", user.ID).Count(&rows).Error; err != nil {
@@ -338,7 +362,7 @@ func TestCheckInBalanceCanBeSpentAndCannotBeWithdrawnHere(t *testing.T) {
 	db := openCheckInDB(t)
 	now := time.Date(2026, 11, 22, 11, 0, 0, 0, time.UTC)
 	user := seedUser(t, db, constants.UserStatusActive, false)
-	service := newCheckInService(db, 50, now, nil)
+	service := newCheckInService(db, 200, now, nil)
 	if _, err := service.Claim(user.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -362,12 +386,192 @@ func TestCheckInBalanceCanBeSpentAndCannotBeWithdrawnHere(t *testing.T) {
 	if paid.String() != "0.30" {
 		t.Fatalf("paid %s", paid)
 	}
-	assertBalance(t, db, user.ID, "0.20")
+	assertBalance(t, db, user.ID, "1.70")
 	var kinds []string
 	if err := db.Model(&walletdomain.Transaction{}).Where("user_id = ?", user.ID).Order("id asc").Pluck("type", &kinds).Error; err != nil {
 		t.Fatal(err)
 	}
 	if len(kinds) != 2 || kinds[0] != constants.WalletTxnTypeDailyCheckIn || kinds[1] != constants.WalletTxnTypeOrderPay {
 		t.Fatalf("ledger types %#v", kinds)
+	}
+}
+
+func seedHistory(t *testing.T, db *gorm.DB, userID uint, date, amount string, deleted bool) {
+	t.Helper()
+	now := time.Date(2026, 11, 21, 8, 0, 0, 0, time.UTC)
+	value := money.FromDecimal(decimal.RequireFromString(amount))
+	row := checkindomain.CheckIn{
+		UserID:      userID,
+		CheckinDate: date,
+		Amount:      value,
+		Currency:    "CNY",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if deleted {
+		row.DeletedAt = &now
+	}
+	if err := db.Create(&row).Error; err != nil {
+		t.Fatal(err)
+	}
+	txn := walletdomain.Transaction{
+		UserID:        userID,
+		Type:          constants.WalletTxnTypeDailyCheckIn,
+		Direction:     constants.WalletTxnDirectionIn,
+		Amount:        value,
+		BalanceBefore: money.FromDecimal(decimal.Zero),
+		BalanceAfter:  value,
+		Currency:      "CNY",
+		Reference:     fmt.Sprintf("daily-checkin:%d:%s", userID, date),
+		Remark:        "旧签到",
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	if err := db.Create(&txn).Error; err != nil {
+		t.Fatal(err)
+	}
+	account := walletdomain.Account{
+		UserID:    userID,
+		Balance:   value,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := db.Create(&account).Error; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestOldAccountStaysOnDailyBoundsAndKeepsHistory(t *testing.T) {
+	db := openCheckInDB(t)
+	now := time.Date(2026, 11, 22, 12, 0, 0, 0, time.FixedZone("Asia/Shanghai", 8*3600))
+	user := seedUser(t, db, constants.UserStatusActive, false)
+	seedHistory(t, db, user.ID, "2026-11-21", "0.69", false)
+	for _, cents := range []int64{0, 31} {
+		out := newCheckInService(db, cents, now, nil)
+		if _, err := out.Claim(user.ID); !errors.Is(err, contract.ErrRewardOutOfRange) {
+			t.Fatalf("daily cents %d: %v", cents, err)
+		}
+	}
+	assertBalance(t, db, user.ID, "0.69")
+	low := newCheckInService(db, 1, now, nil)
+	result, err := low.Claim(user.ID)
+	if err != nil || result.Reward.String() != "0.01" || result.Balance.String() != "0.70" || result.AlreadyClaimed {
+		t.Fatalf("daily low: %+v %v", result, err)
+	}
+	var old checkindomain.CheckIn
+	if err := db.Where("user_id = ? AND checkin_date = ?", user.ID, "2026-11-21").First(&old).Error; err != nil {
+		t.Fatal(err)
+	}
+	if old.Amount.String() != "0.69" {
+		t.Fatalf("old check-in changed to %s", old.Amount)
+	}
+	var oldTxn walletdomain.Transaction
+	if err := db.Where("reference = ?", fmt.Sprintf("daily-checkin:%d:2026-11-21", user.ID)).First(&oldTxn).Error; err != nil {
+		t.Fatal(err)
+	}
+	if oldTxn.Amount.String() != "0.69" || countTxns(t, db, user.ID) != 2 {
+		t.Fatalf("history txn=%s count=%d", oldTxn.Amount, countTxns(t, db, user.ID))
+	}
+
+	highUser := seedUser(t, db, constants.UserStatusActive, false)
+	seedHistory(t, db, highUser.ID, "2026-11-20", "0.80", true)
+	high, err := newCheckInService(db, 30, now, nil).Claim(highUser.ID)
+	if err != nil || high.Reward.String() != "0.30" || high.Balance.String() != "1.10" {
+		t.Fatalf("daily high: %+v %v", high, err)
+	}
+
+	ledgerOnly := seedUser(t, db, constants.UserStatusActive, false)
+	seedHistory(t, db, ledgerOnly.ID, "2026-11-19", "0.40", false)
+	if err := db.Exec("DELETE FROM daily_checkins WHERE user_id = ? AND checkin_date = ?", ledgerOnly.ID, "2026-11-19").Error; err != nil {
+		t.Fatal(err)
+	}
+	kept, err := newCheckInService(db, 1, now, nil).Claim(ledgerOnly.ID)
+	if err != nil || kept.Reward.String() != "0.01" || kept.Balance.String() != "0.41" {
+		t.Fatalf("ledger history: %+v %v", kept, err)
+	}
+}
+
+func TestConcurrentMidnightGrantsOneFirstReward(t *testing.T) {
+	db := openCheckInDB(t)
+	user := seedUser(t, db, constants.UserStatusActive, false)
+	source := &bandReward{first: 220, daily: 1}
+	earlyNow := time.Date(2026, 11, 22, 15, 59, 30, 0, time.UTC)
+	lateNow := time.Date(2026, 11, 22, 16, 0, 30, 0, time.UTC)
+	early := newCheckInService(db, 0, earlyNow, source)
+	late := newCheckInService(db, 0, lateNow, source)
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	results := make(chan checkinapp.Result, 2)
+	for _, service := range []*checkinapp.Service{early, late} {
+		wg.Add(1)
+		go func(service *checkinapp.Service) {
+			defer wg.Done()
+			result, err := service.Claim(user.ID)
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- result
+		}(service)
+	}
+	wg.Wait()
+	close(errs)
+	close(results)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	rewards := map[string]int{}
+	dates := map[string]struct{}{}
+	for result := range results {
+		rewards[result.Reward.String()]++
+		dates[result.CheckinDate] = struct{}{}
+	}
+	if rewards["2.20"] != 1 || rewards["0.01"] != 1 {
+		t.Fatalf("rewards %#v", rewards)
+	}
+	if _, ok := dates["2026-11-22"]; !ok {
+		t.Fatal("missing 2026-11-22")
+	}
+	if _, ok := dates["2026-11-23"]; !ok {
+		t.Fatal("missing 2026-11-23")
+	}
+	assertBalance(t, db, user.ID, "2.21")
+	if countTxns(t, db, user.ID) != 2 {
+		t.Fatal("midnight race created the wrong number of ledger rows")
+	}
+	source.mu.Lock()
+	defer source.mu.Unlock()
+	firsts := 0
+	for _, band := range source.bands {
+		if band == checkinapp.RewardBandFirst {
+			firsts++
+		}
+	}
+	if firsts != 1 || len(source.bands) != 2 {
+		t.Fatalf("bands %#v", source.bands)
+	}
+}
+
+func TestRolledBackDrawDoesNotConsumeFirstReward(t *testing.T) {
+	db := openCheckInDB(t)
+	now := time.Date(2026, 11, 22, 9, 0, 0, 0, time.UTC)
+	user := seedUser(t, db, constants.UserStatusActive, false)
+	source := &bandReward{first: 180, daily: 1, fail: 1}
+	service := newCheckInService(db, 0, now, source)
+	if _, err := service.Claim(user.ID); err == nil {
+		t.Fatal("expected the first draw to fail")
+	}
+	assertBalance(t, db, user.ID, "0.00")
+	if countTxns(t, db, user.ID) != 0 {
+		t.Fatal("failed draw left a ledger row")
+	}
+	result, err := service.Claim(user.ID)
+	if err != nil || result.Reward.String() != "1.80" || result.Balance.String() != "1.80" || result.AlreadyClaimed {
+		t.Fatalf("retry: %+v %v", result, err)
+	}
+	source.mu.Lock()
+	defer source.mu.Unlock()
+	if len(source.bands) != 2 || source.bands[0] != checkinapp.RewardBandFirst || source.bands[1] != checkinapp.RewardBandFirst {
+		t.Fatalf("bands %#v", source.bands)
 	}
 }

@@ -86,6 +86,43 @@ func TestCheckInRejectsMissingUserAndForgedFields(t *testing.T) {
 	if payload["status_code"] != float64(400) || stub.claimCalls != 0 {
 		t.Fatalf("forged query reached claim: %#v calls=%d", payload, stub.claimCalls)
 	}
+
+	first := performCheckIn(handler, http.MethodPost, "/api/v1/daily-checkins?first_checkin=1", `{"first_checkin":true,"is_first":true,"bonus":"2.20"}`, &userID)
+	payload = decodeStatus(t, first)
+	if payload["status_code"] != float64(400) || stub.claimCalls != 0 {
+		t.Fatalf("forged first-check-in flag reached claim: %#v", payload)
+	}
+}
+
+func TestCheckInResponseKeepsActualAmountAndOmitsRanges(t *testing.T) {
+	userID := uint(8)
+	stub := &checkInStub{result: checkinapp.Result{
+		CheckedIn:                    true,
+		AlreadyClaimed:               false,
+		Reward:                       money.FromDecimal(decimal.RequireFromString("2.00")),
+		Balance:                      money.FromDecimal(decimal.RequireFromString("2.69")),
+		Currency:                     "CNY",
+		CheckinDate:                  "2026-11-23",
+		NextCheckinDate:              "2026-11-24",
+		DebtOffset:                   money.FromDecimal(decimal.Zero),
+		OffsetsUnrecoveredCommission: false,
+	}}
+	handler := &UserHandler{svc: stub}
+	recorder := performCheckIn(handler, http.MethodPost, "/api/v1/daily-checkins", `{}`, &userID)
+	payload := decodeStatus(t, recorder)
+	if payload["status_code"] != float64(0) {
+		t.Fatalf("claim status: %#v", payload)
+	}
+	raw := recorder.Body.String()
+	for _, leaked := range []string{"0.10", "0.80", "1.80", "2.20", "0.01", "0.30", "min_cents", "max_cents", "first_checkin", "reward_min", "reward_max"} {
+		if strings.Contains(raw, leaked) {
+			t.Fatalf("public payload leaked %s: %s", leaked, raw)
+		}
+	}
+	data := payload["data"].(map[string]any)
+	if data["reward_amount"] != "2.00" || data["balance"] != "2.69" || data["next_checkin_date"] != "2026-11-24" {
+		t.Fatalf("actual amounts: %#v", data)
+	}
 }
 
 func TestCheckInTodayDoesNotClaim(t *testing.T) {

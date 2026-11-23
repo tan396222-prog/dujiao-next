@@ -89,8 +89,9 @@ func (s *Service) Status(userID uint) (Result, error) {
 	return claimedResult(row, balance, true, date), nil
 }
 
-// Claim 在一个事务里生成奖励、写入签到行并增加购物余额。
-// 重复请求、并发和支付式重试都返回同一笔奖励，不重复入账。
+// Claim 在账号行锁里决定奖励、写入签到并增加购物余额。
+// 没有任何历史签到和签到流水时使用首签区间，否则使用每日区间。
+// 重复请求、并发和重试都返回已经入账的金额，不重新抽奖。
 func (s *Service) Claim(userID uint) (Result, error) {
 	if s == nil || s.runner == nil || userID == 0 {
 		return Result{}, contract.ErrFailed
@@ -114,11 +115,33 @@ func (s *Service) Claim(userID uint) (Result, error) {
 			result = claimedResult(row, balance, true, date)
 			return nil
 		}
-		cents, err := s.rewards.Cents()
+		reference := fmt.Sprintf("daily-checkin:%d:%s", userID, date)
+		recorded, found, err := tx.ExistingCredit(userID, reference)
+		if err != nil {
+			return err
+		}
+		if found {
+			created := checkInRow(userID, date, recorded.Amount, recorded.TransactionID, now)
+			if err := tx.InsertCheckIn(created); err != nil {
+				return err
+			}
+			result = claimedResult(created, recorded.Balance, true, date)
+			return nil
+		}
+		prior, err := tx.HasPriorReward(userID)
+		if err != nil {
+			return err
+		}
+		band := RewardBandDaily
+		if !prior {
+			band = RewardBandFirst
+		}
+		cents, err := s.rewards.Cents(band)
 		if err != nil {
 			return contract.ErrFailed
 		}
-		if cents < MinRewardCents || cents > MaxRewardCents {
+		min, max, ok := band.bounds()
+		if !ok || cents < min || cents > max {
 			return contract.ErrRewardOutOfRange
 		}
 		amount := money.FromDecimal(decimal.NewFromInt(cents).Shift(-2))
@@ -127,7 +150,7 @@ func (s *Service) Claim(userID uint) (Result, error) {
 			Amount:    amount,
 			Currency:  constants.SiteCurrencyDefault,
 			Date:      date,
-			Reference: fmt.Sprintf("daily-checkin:%d:%s", userID, date),
+			Reference: reference,
 			Remark:    fmt.Sprintf("每日签到 %s 奖励进入购物余额，不抵扣未追回推广佣金", date),
 		})
 		if err != nil {
@@ -136,15 +159,7 @@ func (s *Service) Claim(userID uint) (Result, error) {
 		if credited.AlreadyRecorded {
 			amount = credited.Amount
 		}
-		created := &checkindomain.CheckIn{
-			UserID:      userID,
-			CheckinDate: date,
-			Amount:      amount,
-			Currency:    constants.SiteCurrencyDefault,
-			WalletTxnID: credited.TransactionID,
-			CreatedAt:   now,
-			UpdatedAt:   now,
-		}
+		created := checkInRow(userID, date, amount, credited.TransactionID, now)
 		if err := tx.InsertCheckIn(created); err != nil {
 			return err
 		}
@@ -203,6 +218,18 @@ func (s *Service) reloadClaim(userID uint, date string) (Result, error) {
 		return Result{}, err
 	}
 	return claimedResult(row, balance, true, date), nil
+}
+
+func checkInRow(userID uint, date string, amount money.Amount, txnID uint, now time.Time) *checkindomain.CheckIn {
+	return &checkindomain.CheckIn{
+		UserID:      userID,
+		CheckinDate: date,
+		Amount:      amount,
+		Currency:    constants.SiteCurrencyDefault,
+		WalletTxnID: txnID,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
 }
 
 func idleResult(balance money.Amount, date string) Result {

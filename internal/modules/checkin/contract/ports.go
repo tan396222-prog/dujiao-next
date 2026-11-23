@@ -46,6 +46,10 @@ type ClaimTx interface {
 	InsertCheckIn(row *checkindomain.CheckIn) error
 	Credit(input CreditInput) (CreditResult, error)
 	Balance(userID uint) (money.Amount, error)
+	// ExistingCredit 按服务端流水号查找已经入账的签到奖励。
+	ExistingCredit(userID uint, reference string) (CreditResult, bool, error)
+	// HasPriorReward 查看这个账号是否已经有过成功签到或对应钱包流水。
+	HasPriorReward(userID uint) (bool, error)
 }
 
 // ClaimRunner 把账号锁、签到行和钱包入账放进同一个事务。
